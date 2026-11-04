@@ -25,11 +25,21 @@ out=$(CLAUDECODE=1 bash -c 'exec -a copilot bash -c '"'"'"$1"; :'"'"' _ "$1"' _ 
 # shellcheck disable=SC2016
 out=$(bash -c 'exec -a /home/u/.local/bin/copilot bash -c '"'"'"$1"; :'"'"' _ "$1"' _ "$HARNESS")
 [ "$out" = copilot ] || fail "an installed Copilot path must identify the adapter: $out"
+# The negative cases must not see a real Copilot higher in the parent chain
+# (this suite may itself run inside one). A ps wrapper keeps every real field of
+# the process under test but ends the parent walk there.
+real_ps=$(command -v ps)
+mkdir -p "$TMP_ROOT/stopps"
+cat > "$TMP_ROOT/stopps/ps" <<SH
+#!/usr/bin/env bash
+case "\$*" in *ppid=*) printf '1\n' ;; *) exec "$real_ps" "\$@" ;; esac
+SH
+chmod +x "$TMP_ROOT/stopps/ps"
 # shellcheck disable=SC2016
-out=$(bash -c 'exec -a copilot-language-server bash -c '"'"'"$1" ancestry "$$"; :'"'"' _ "$1"' _ "$HARNESS")
+out=$(PATH="$TMP_ROOT/stopps:$PATH" bash -c 'exec -a copilot-language-server bash -c '"'"'"$1" ancestry "$$"; :'"'"' _ "$1"' _ "$HARNESS")
 [ "$out" != 'comm copilot' ] || fail "unrelated copilot-language-server claimed the adapter"
 # shellcheck disable=SC2016
-out=$(bash -c 'exec -a editor bash -c '"'"'"$1" ancestry "$$"; :'"'"' _ "$1" copilot' _ "$HARNESS")
+out=$(PATH="$TMP_ROOT/stopps:$PATH" bash -c 'exec -a editor bash -c '"'"'"$1" ancestry "$$"; :'"'"' _ "$1" copilot' _ "$HARNESS")
 [ "$out" != 'comm copilot' ] || fail "a later argument named copilot claimed the adapter"
 [ "$(fm_agent_process_classify MainThread copilot 'copilot --no-auto-update')" = agent ] || fail "liveness lost Copilot"
 [ "$(fm_agent_process_classify MainThread /home/u/.local/bin/copilot 'copilot')" = agent ] || fail "liveness lost an installed Copilot"
