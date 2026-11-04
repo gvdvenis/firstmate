@@ -3286,7 +3286,7 @@ fi
 # so every other spawn-capable backend is refused before any endpoint or record
 # exists.
 if [ "$HARNESS" = copilot ] && [ "$BACKEND" != tmux ] && [ "$BACKEND" != herdr ]; then
-  echo "error: copilot is verified on the tmux and herdr backends only; backend=$BACKEND is unproven for its composer and interrupt reads. Select backend tmux or herdr." >&2
+  echo "error: copilot is enabled only on tmux and herdr; real-pane verification is pending; backend=$BACKEND is unproven for its composer and interrupt reads. Select backend tmux or herdr." >&2
   exit 1
 fi
 

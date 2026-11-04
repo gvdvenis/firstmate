@@ -188,7 +188,7 @@ for backend in zellij cmux orca; do
   if out=$(FM_FAKE_LAUNCH_LOG="$case_dir/copilot-$backend.launch" fm_test_run_spawn "$home" "$wt" "$fakebin" "copilot-$backend" "$proj" \
     --scout --harness copilot --backend "$backend" 2>&1)
   then fail "Copilot launch accepted on backend=$backend"; fi
-  assert_contains "$out" "copilot is verified on the tmux and herdr backends only; backend=$backend" "wrong refusal on $backend: $out"
+  assert_contains "$out" "copilot is enabled only on tmux and herdr; real-pane verification is pending; backend=$backend" "wrong refusal on $backend: $out"
   assert_absent "$case_dir/copilot-$backend.launch" "Copilot launched on $backend"
   assert_absent "$home/state/copilot-$backend.meta" "refused $backend spawn left a task record"
   assert_absent "$home/state/copilot-$backend.busy-gen" "refused $backend spawn armed busy state"
