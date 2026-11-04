@@ -2308,6 +2308,30 @@ _fm_composer_hermes_state() {  # <screen> <styled>
     }'
 }
 
+# GitHub Copilot CLI draws its composer as one `❯` row between two full-width
+# horizontal rules with a single footer row below, and keeps that shape while a
+# turn is running (verified, copilot 1.0.105). The shape is read only when the
+# caller names the recorded harness copilot (FM_COMPOSER_HARNESS), because a bare
+# `❯` between rules is not proof of this agent anywhere else. More than one row
+# between the rules is a multi-line draft; anything that does not end in the
+# rule pair plus at most one footer row (a picker, a dialog) is unknown.
+_fm_composer_copilot_state() {  # <plain-screen>
+  printf '%s\n' "$1" | awk '
+    { rows[NR]=$0 }
+    END {
+      last=NR; while (last>0 && rows[last] ~ /^[[:space:]]*$/) last--
+      bottom=0
+      for (i=last; i>0 && i>last-2; i--) if (rows[i] ~ /^[[:space:]]*──────────+[[:space:]]*$/) { bottom=i; break }
+      if (!bottom) { print "unknown"; exit }
+      top=0
+      for (i=bottom-1; i>0 && i>bottom-12; i--) if (rows[i] ~ /^[[:space:]]*──────────+[[:space:]]*$/) { top=i; break }
+      if (!top || rows[top+1] !~ /^[[:space:]]*❯/) { print "unknown"; exit }
+      if (bottom-top > 2) { print "pending"; exit }
+      text=rows[top+1]; sub(/^[[:space:]]*❯[[:space:]]*/, "", text)
+      if (text ~ /^[[:space:]]*$/) print "empty"; else print "pending"
+    }'
+}
+
 fm_composer_classify_screen() {  # <caps> <screen> [cursor_row] [identity]
   local caps=$1 screen=$2 cy=${3:-} identity=${4:-}
   local styled=0 cursor=0 has_identity=0 cortex_proven=0 cortex_ask=0 kv plain
@@ -2344,6 +2368,10 @@ EOF
     return
   fi
   plain=$(printf '%s\n' "$screen" | fm_composer_strip_ansi)
+  if [ "${FM_COMPOSER_HARNESS:-}" = copilot ]; then
+    _fm_composer_copilot_state "$plain"
+    return
+  fi
   _fm_composer_scan_screen "$plain" "$cy" '' "$cortex_proven"
   # The lazy Cortex identity pass: only a caller that asked for it
   # (cortex=ask), has not yet supplied an identity, and sees a titled rounded

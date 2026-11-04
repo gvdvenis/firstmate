@@ -47,6 +47,10 @@
 #   kiro-hook        Kiro V2 agent-config hooks (userPromptSubmit opens; stop
 #                    closes) - kiro's ONLY state source; its per-turn stop hook
 #                    also keeps the turn-ended notification touch
+#   copilot-hook     GitHub Copilot CLI per-task plugin hooks (userPromptSubmitted
+#                    opens; agentStop and sessionEnd close) - copilot's ONLY state
+#                    source; agentStop does not fire on an interrupt, so the record
+#                    stays busy until the next prompt
 #   codex-hook, codex-appserver  reserved: Codex, gated by
 #                    fm_busy_codex_semantic_source
 #   kimi-wire, kimi-hook  reserved: standalone Kimi, gated by fm_busy_kimi_verified
@@ -339,6 +343,7 @@ fm_busy_sources_for_harness() {  # <harness>
     commandcode) adapter=commandcode-mod ;;
     polytoken) adapter=polytoken-hook ;;
     kiro) adapter=kiro-hook ;;
+    copilot) adapter=copilot-hook ;;
     pi|pi-signed) adapter=pi-ext ;;
     omp) adapter=omp-ext ;;
     kimi*)
