@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Detect the agent harness this process tree runs on.
-# Usage: fm-harness.sh                  print own harness: claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|devin|commandcode|polytoken|cortex|kiro|hermes|unknown
+# Usage: fm-harness.sh                  print own harness: claude|codex|opencode|pi|pi-signed|grok|kimi|cursor|gemini|muse|rovo|omp|agy|devin|commandcode|polytoken|cortex|kiro|hermes|copilot|unknown
 #        fm-harness.sh crew             print the effective CREWMATE harness
 #                                        (config/crew-harness; "default" resolves to own)
 #        fm-harness.sh secondmate [id]  print the harness the PRIMARY uses to launch
@@ -177,6 +177,19 @@ ancestry_names_omp() {
   return 1
 }
 
+# True when the process's argv[0] is exactly `copilot`. The kernel name of the
+# Copilot CLI is `MainThread`, so argv[0] is the only identity. Linux argv
+# fields preserve spaces; the ps fallback reads the first whitespace word.
+fm_copilot_args_are_copilot() {  # <args> [pid]
+  local args=${1:-} pid=${2:-} first=
+  if [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ]; then
+    IFS= read -r -d '' first < "/proc/$pid/cmdline" || true
+  else
+    first=${args%% *}
+  fi
+  [ "${first##*/}" = copilot ]
+}
+
 # Print "<strength> <harness>" when one process identifies a harness, or nothing.
 # Strength records how the match was made:
 #   comm - the ancestor's own executable name identifies the harness. This is a
@@ -200,6 +213,14 @@ harness_process_verdict() {  # <pid>
   args=$(ps -o args= -p "$pid" 2>/dev/null) || args=
   if fm_hermes_process_matches "$args" "$pid"; then
     echo "comm hermes"
+    return
+  fi
+  # copilot (GitHub Copilot CLI) is a native binary whose kernel process name
+  # is the thread name `MainThread`, never `copilot` (verified, copilot 1.0.105:
+  # comm=MainThread, argv[0]=copilot). Only argv[0] identifies it, so it is
+  # matched by the exact basename of the first word, never by a later argument.
+  if fm_copilot_args_are_copilot "$args" "$pid"; then
+    echo "comm copilot"
     return
   fi
   case "$(basename -- "$comm")" in
