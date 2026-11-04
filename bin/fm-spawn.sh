@@ -3108,8 +3108,11 @@ launch_template() {
   # GitHub Copilot CLI: -i starts the supervised interactive session and
   # auto-submits the typed launch envelope (verified, copilot 1.0.105).
   # --allow-all is the YOLO equivalent of every permission prompt and path/URL
-  # check an unattended crewmate would otherwise hit, and it raises no folder-
-  # trust dialog on a fresh worktree. --no-auto-update keeps a worker from
+  # check an unattended crewmate would otherwise hit. It does NOT skip the
+  # folder-trust dialog of a fresh worktree, which would hold the -i prompt
+  # unsent (verified, copilot 1.0.105); COPILOT_ALLOW_ALL=true is the documented
+  # switch that also trusts the working directory without prompting, at the cost
+  # of loading that worktree's own skills, MCP servers and hooks. --no-auto-update keeps a worker from
   # swapping its own binary mid-task. --plugin-dir loads the private per-task
   # plugin (bin/fm-copilot-plugin.sh) carrying the lifecycle hooks, which is the
   # only per-task hook channel: every other hook source is a user or project
@@ -3118,7 +3121,7 @@ launch_template() {
   # whenever that variable is set. Copilot publishes no identity marker of its
   # own, so ancestry decides (its kernel process name is MainThread, argv[0] is
   # copilot).
-  copilot) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI __COPILOTBIN__ --allow-all --no-auto-update --plugin-dir __COPILOTPLUGIN__ __MODELFLAG____EFFORTFLAG__-i "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  copilot) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI COPILOT_ALLOW_ALL=true __COPILOTBIN__ --allow-all --no-auto-update --plugin-dir __COPILOTPLUGIN__ __MODELFLAG____EFFORTFLAG__-i "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Hermes's native interactive query starts a visible TUI, never one-shot.
   hermes) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI FM_HERMES_HARNESS=hermes HERMES_HOME=__HERMESHOME__ HERMES_MANAGED_DIR=__HERMESHOOKS__ __HERMESBIN__ __HERMESPROFILE__chat --tui --yolo --accept-hooks -q "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Kimi Code rejects a positional prompt, so it launches bare and receives
@@ -3277,9 +3280,11 @@ if [ "$HARNESS" = commandcode ] && [ "$BACKEND" != tmux ] && [ "$BACKEND" != her
 fi
 
 # Copilot's composer shape is read from the recorded harness name and its
-# interrupt arming needs a visible-screen read between presses, both proven only
-# on tmux and Herdr (docs/verification/copilot.md), so every other spawn-capable
-# backend is refused before any endpoint or record exists.
+# interrupt arming needs a visible-screen read between presses. Both rest on
+# backend-neutral code that tmux and Herdr share; no real Copilot pane has run
+# on either yet (docs/verification/copilot.md says exactly what was exercised),
+# so every other spawn-capable backend is refused before any endpoint or record
+# exists.
 if [ "$HARNESS" = copilot ] && [ "$BACKEND" != tmux ] && [ "$BACKEND" != herdr ]; then
   echo "error: copilot is verified on the tmux and herdr backends only; backend=$BACKEND is unproven for its composer and interrupt reads. Select backend tmux or herdr." >&2
   exit 1

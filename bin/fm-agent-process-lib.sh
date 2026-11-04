@@ -33,6 +33,9 @@ fm_agent_process_classify_name() {  # <path> [argv0] -> agent|shell|other
   local path=$1 argv0=${2:-} base
   base=${path##*/}
   base=${base#-}
+  # The tmux foreground reading passes an empty path with only argv[0]; Copilot's
+  # kernel name is MainThread, so its exact argv[0] basename is the identity.
+  [ "${argv0##*/}" != copilot ] || base=copilot
   case "$base" in
     # muse is anchored rather than globbed like its neighbours: its installed
     # binary is muse-bin-<version> (the launcher execs it, so the version is the

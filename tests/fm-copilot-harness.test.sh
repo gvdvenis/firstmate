@@ -33,6 +33,10 @@ out=$(bash -c 'exec -a editor bash -c '"'"'"$1" ancestry "$$"; :'"'"' _ "$1" cop
 [ "$out" != 'comm copilot' ] || fail "a later argument named copilot claimed the adapter"
 [ "$(fm_agent_process_classify MainThread copilot 'copilot --no-auto-update')" = agent ] || fail "liveness lost Copilot"
 [ "$(fm_agent_process_classify MainThread /home/u/.local/bin/copilot 'copilot')" = agent ] || fail "liveness lost an installed Copilot"
+# tmux's foreground reading passes an empty path with only argv[0].
+[ "$(fm_agent_process_classify_name '' copilot)" = agent ] || fail "tmux path-less reading lost Copilot"
+[ "$(fm_agent_process_classify_name '' /home/u/.local/bin/copilot)" = agent ] || fail "tmux path-less installed Copilot lost"
+[ "$(fm_agent_process_classify_name '' copilot-language-server)" = other ] || fail "tmux path-less lookalike claimed"
 [ "$(fm_agent_process_classify MainThread '' 'copilot')" = other ] || fail "liveness read a nameless MainThread as Copilot"
 [ "$(fm_agent_process_classify MainThread copilot-language-server 'copilot-language-server')" = other ] || fail "liveness claims unrelated executable"
 pass "Copilot argv[0] identity beats foreign markers; anchored liveness"
@@ -74,6 +78,16 @@ busy=$(screen '❯' | sed '$d'; printf '%s\n' ' ◎ Working esc esc interrupt   
 picker=$(printf '%s\n' ' Rewind to a previous point' '' '   ❯ Reply with the single word PONG' '' ' ↑↓ Navigate · Enter Select · Esc Cancel')
 [ "$(fm_composer_classify_screen "$caps" "$picker")" = unknown ] || fail 'rewind picker read as a composer'
 [ "$(fm_composer_classify_screen "$caps" "$(printf '%s\n' 'ordinary shell output' '$ ')")" = unknown ] || fail 'a shell read as a composer'
+# A byte-based awk (mawk, or LC_ALL=C) must still match a normal-width rule.
+export FM_COMPOSER_HARNESS=copilot
+for awk_locale in C C.UTF-8; do
+  [ "$(LC_ALL=$awk_locale fm_composer_classify_screen "$caps" "$(screen '❯')")" = empty ] || fail "120-column rule unreadable under LC_ALL=$awk_locale"
+  [ "$(LC_ALL=$awk_locale fm_composer_classify_screen "$caps" "$(screen '❯ draft')")" = pending ] || fail "draft unreadable under LC_ALL=$awk_locale"
+done
+if command -v mawk >/dev/null 2>&1; then
+  mawkbin="$TMP_ROOT/mawkbin"; mkdir -p "$mawkbin"; ln -sf "$(command -v mawk)" "$mawkbin/awk"
+  [ "$(PATH="$mawkbin:$PATH" fm_composer_classify_screen "$caps" "$(screen '❯')")" = empty ] || fail 'rule unreadable under mawk'
+fi
 # The shape is proof only for a pane whose recorded harness is copilot.
 unset FM_COMPOSER_HARNESS
 case "$(fm_composer_classify_screen "$caps" "$(screen '❯ half typed draft')")" in
@@ -136,6 +150,7 @@ if ! out=$(FM_FAKE_LAUNCH_LOG="$case_dir/launch" fm_test_run_spawn "$home" "$wt"
 then fail "spawn failed: $out"; fi
 launch=$(cat "$case_dir/launch")
 assert_contains "$launch" '--allow-all' 'autonomy flag missing'
+assert_contains "$launch" 'COPILOT_ALLOW_ALL=true' 'folder trust switch missing (the dialog would hold the prompt)'
 assert_contains "$launch" '--no-auto-update' 'auto-update not disabled'
 assert_contains "$launch" "--plugin-dir '$home/state/copilot-worker.copilot-plugin'" 'private plugin missing'
 assert_contains "$launch" "--model 'claude-sonnet-5.5'" 'model lost'
@@ -179,3 +194,21 @@ for backend in zellij cmux orca; do
   assert_absent "$home/state/copilot-$backend.busy-gen" "refused $backend spawn armed busy state"
 done
 pass "Copilot launches are refused on zellij, cmux, and orca"
+
+# Backend level: a shell-led pane (job control off) whose foreground group holds
+# MainThread with argv[0] copilot must read alive through the real tmux probe.
+(
+  FM_BACKEND_LIB_DIR="$ROOT/bin"
+  # shellcheck source=bin/backends/tmux.sh
+  . "$ROOT/bin/backends/tmux.sh"
+  fm_backend_tmux_window_inventory() { printf 'w\n'; }
+  fm_backend_tmux_foreground_comms() { printf 'bash\nMainThread\n'; }
+  fm_backend_tmux_foreground_argv0s() { printf 'bash\ncopilot\n'; }
+  fm_backend_tmux_foreground_pids() { :; }
+  fm_backend_tmux_foreground_args() { :; }
+  fm_backend_tmux_current_command() { printf 'bash'; }
+  [ "$(fm_backend_tmux_agent_state s:w)" = alive ] || exit 1
+  fm_backend_tmux_foreground_argv0s() { printf 'bash\ncopilot-language-server\n'; }
+  [ "$(fm_backend_tmux_agent_state s:w)" != alive ] || exit 2
+) || fail "tmux probe misread a shell-led Copilot pane (exit $?)"
+pass "tmux probe reads a shell-led Copilot pane alive and a lookalike not alive"
