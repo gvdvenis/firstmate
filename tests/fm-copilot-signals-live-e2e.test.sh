@@ -23,6 +23,15 @@ WORK="$LAB/work"
 mkdir -p "$STATE" "$WORK"
 gen=$("$ROOT/bin/fm-busy-event.sh" arm "$STATE" live) || fail 'busy arm failed'
 "$ROOT/bin/fm-copilot-plugin.sh" "$STATE" live "$gen" || fail 'plugin writer failed'
+# Test-only handshake: the submit hook holds the turn open after it has written
+# busy, until the driver has seen that record and touched the release file. The
+# latest-value record file can then never be missed by sampling.
+RELEASE="$LAB/release"
+hooks="$STATE/live.copilot-plugin/hooks/hooks.json"
+jq --arg wait "; n=0; while [ ! -e '$RELEASE' ] && [ \$n -lt 600 ]; do sleep 0.1; n=\$((n+1)); done" \
+  '.hooks.userPromptSubmitted[0].bash += $wait | .hooks.userPromptSubmitted[0].timeoutSec = 90' "$hooks" > "$hooks.new" \
+  || fail 'handshake wiring failed'
+mv "$hooks.new" "$hooks" || fail 'handshake wiring failed'
 model_args=()
 [ -z "${FM_COPILOT_MODEL:-}" ] || model_args=(--model "$FM_COPILOT_MODEL")
 
@@ -30,8 +39,8 @@ model_args=()
 # turn has settled, then types /exit and reports the child's exit status.
 driver=$(cat <<'PY'
 import os, pty, select, struct, fcntl, termios, sys, time, signal
-state, plugin, work = sys.argv[1:4]
-extra = sys.argv[4:]
+state, plugin, work, release = sys.argv[1:5]
+extra = sys.argv[5:]
 pid, fd = pty.fork()
 if pid == 0:
     os.chdir(work)
@@ -62,6 +71,7 @@ while time.time() < deadline:
     r = rec()
     if ' state=busy ' in r and ' source=copilot-hook ' in r:
         seen_busy = True
+        open(release, 'w').close()
     if seen_busy and ' state=idle ' in r:
         break
     pump(0.2)
@@ -84,7 +94,7 @@ else:
     print('exit-%d' % (os.waitstatus_to_exitcode(status)), flush=True)
 PY
 )
-identity=$(cd "$LAB" && python3 -I -c "$driver" "$STATE" "$STATE/live.copilot-plugin" "$WORK" "${model_args[@]}") \
+identity=$(cd "$LAB" && python3 -I -c "$driver" "$STATE" "$STATE/live.copilot-plugin" "$WORK" "$RELEASE" "${model_args[@]}") \
   || fail 'driver failed'
 exit_note=$(printf '%s\n' "$identity" | tail -1)
 identity=$(printf '%s\n' "$identity" | head -1)
