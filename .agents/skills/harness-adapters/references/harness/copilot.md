@@ -9,7 +9,7 @@ Primary and secondmate supervision and every other runtime backend are unsupport
 | Fact | Value |
 |---|---|
 | Launch | `copilot --allow-all --no-auto-update --plugin-dir <state>/<id>.copilot-plugin [--model <id>] [--reasoning-effort <level>] -i "<typed launch envelope>"`; `-i` starts the interactive session and auto-submits the prompt. [`fm-spawn.sh`](../../../../../bin/fm-spawn.sh)'s header owns flags. |
-| Autonomy | `--allow-all` grants every tool, path, and URL permission and raises no folder-trust dialog in a fresh worktree. Firstmate maps no other permission mode. |
+| Autonomy | `--allow-all` grants every tool, path, and URL permission but still shows a folder-trust dialog in a fresh worktree, which holds the `-i` prompt unsent. The launch therefore also sets `COPILOT_ALLOW_ALL=true`, which trusts the directory without prompting and so loads the worktree's own skills, MCP servers, and hooks. Firstmate maps no other permission mode. |
 | Model and effort | `--model <id>` takes a catalog id such as `claude-sonnet-5.5`; an unknown id exits at launch with `Model "<id>" from --model flag is not available.` `--reasoning-effort low\|medium\|high\|xhigh\|max` passes through. |
 | Busy and turn end | Plugin hooks written by [`fm-copilot-plugin.sh`](../../../../../bin/fm-copilot-plugin.sh): `userPromptSubmitted` opens a turn, `agentStop` and `sessionEnd` close it, written as the `copilot-hook` record in [`fm-busy-lib.sh`](../../../../../bin/fm-busy-lib.sh). A copilot task with no record classifies `unknown missing`. |
 | Interrupt | Two Escape presses. On a running turn the first renders `esc again to interrupt`, and the control plane sends the second only after that proof; the turn prints `Operation cancelled by user`. `agentStop` does not fire, so the busy record stays until the next prompt. On an idle agent with history the second press opens a `Rewind to a previous point` picker, which one more Escape closes without restoring. |
@@ -22,7 +22,7 @@ Primary and secondmate supervision and every other runtime backend are unsupport
 ## Hook carrier
 
 A plugin directory is the per-task hook channel because every other source is a user or project file (`~/.copilot/hooks`, `.github/hooks` in the worktree).
-`--plugin-dir` loads the hooks with no folder-trust prompt.
+`--plugin-dir` loads the hooks once the directory is trusted.
 The directory holds `plugin.json` and `hooks/hooks.json` and is retired by relaunch and removed whole by teardown.
 A raw launch command carries no `--plugin-dir`, so nothing is armed for it.
 

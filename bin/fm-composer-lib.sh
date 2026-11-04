@@ -2321,10 +2321,10 @@ _fm_composer_copilot_state() {  # <plain-screen>
     END {
       last=NR; while (last>0 && rows[last] ~ /^[[:space:]]*$/) last--
       bottom=0
-      for (i=last; i>0 && i>last-2; i--) if (rows[i] ~ /^[[:space:]]*──────────+[[:space:]]*$/) { bottom=i; break }
+      for (i=last; i>0 && i>last-2; i--) if (rows[i] ~ /^[[:space:]]*(─)(─)(─)(─)(─)(─)(─)(─)(─)(─)+[[:space:]]*$/) { bottom=i; break }
       if (!bottom) { print "unknown"; exit }
       top=0
-      for (i=bottom-1; i>0 && i>bottom-12; i--) if (rows[i] ~ /^[[:space:]]*──────────+[[:space:]]*$/) { top=i; break }
+      for (i=bottom-1; i>0 && i>bottom-12; i--) if (rows[i] ~ /^[[:space:]]*(─)(─)(─)(─)(─)(─)(─)(─)(─)(─)+[[:space:]]*$/) { top=i; break }
       if (!top || rows[top+1] !~ /^[[:space:]]*❯/) { print "unknown"; exit }
       if (bottom-top > 2) { print "pending"; exit }
       text=rows[top+1]; sub(/^[[:space:]]*❯[[:space:]]*/, "", text)

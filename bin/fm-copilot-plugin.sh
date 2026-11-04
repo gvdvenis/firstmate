@@ -5,7 +5,8 @@
 #   plugin.json       the manifest Copilot reads before it loads a plugin dir
 #   hooks/hooks.json  userPromptSubmitted, agentStop, and sessionEnd hooks
 # The launch passes the directory with --plugin-dir, which loads the hooks
-# without any folder-trust prompt (verified, copilot 1.0.105). A plugin is the
+# once the working directory is trusted (the launch trusts it through
+# COPILOT_ALLOW_ALL; verified, copilot 1.0.105). A plugin is the
 # per-task hook channel because every other hook source is a user or project
 # file (~/.copilot/hooks, .github/hooks in the worktree). Nothing global and
 # nothing in the worktree is edited; fm-control-lib.sh and fm-teardown.sh own

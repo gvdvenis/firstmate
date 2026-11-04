@@ -6,10 +6,10 @@ Primary, secondmate, and every backend other than tmux and Herdr are unsupported
 
 ## Not exercised
 
-This host has no tmux, and Herdr lifecycle commands were out of scope for the task, so neither backend ran a Copilot pane.
-The tmux and Herdr paths rest on shared, backend-neutral code: the process classifier reads argv[0], the composer read takes the recorded harness name, and the interrupt arming reads a visible screen.
-Run the guard below on a host with each backend, and a supervised spawn on tmux and on Herdr, before treating those placements as field-proven.
-A full `fm-spawn.sh` launch was exercised only against fake executables in the portable regression.
+Neither tmux nor Herdr has run a real Copilot pane: this host has no tmux, and Herdr lifecycle commands were out of scope for the task.
+Everything vendor-side was observed through a private pty, and the backend side is covered only by the portable regression with simulated process readings and fake executables.
+The spawn accepts tmux and Herdr because they share the backend-neutral code that regression pins (argv[0] liveness, the recorded-harness composer read, screen-gated interrupt arming), not because a pane run proved them.
+Do not treat either placement as verified until a supervised spawn, steer, interrupt, exit, and cleanup has run on it.
 
 ## Reusable guards
 
@@ -20,12 +20,7 @@ bash bin/fm-test-run.sh tests/fm-copilot-harness.test.sh
 
 The live guard needs a signed-in `copilot`, `python3`, and `jq`, creates its own pty and temporary directory, and spends one small prompt.
 An unavailable required tool is reported by the shared `fm_live_gate`; explicit opt-in refuses missing capabilities.
-Its result on 2026-11-04:
-
-```text
-ok - copilot GitHub Copilot CLI 1.0.105.: live process comm=MainThread argv0=copilot classified as an agent
-ok - copilot GitHub Copilot CLI 1.0.105.: userPromptSubmitted opened the turn, agentStop closed it and raised the turn-end notification
-```
+It launches in an untrusted temporary directory, asserts that a real prompt produces `busy copilot-hook`, then the idle transition and turn-end notification, and that `/exit` ends the process with status 0.
 
 ## Process identity
 
@@ -35,7 +30,7 @@ Only argv[0] therefore names the harness, and both the tool-side detector and th
 
 ## Hooks
 
-A plugin directory passed with `--plugin-dir` (`plugin.json` plus `hooks/hooks.json`, `{"version":1,"hooks":{...}}` with `{"type":"command","bash":"...","timeoutSec":N}` entries) loaded in both `-p` and interactive runs, with no folder-trust prompt.
+A plugin directory passed with `--plugin-dir` (`plugin.json` plus `hooks/hooks.json`, `{"version":1,"hooks":{...}}` with `{"type":"command","bash":"...","timeoutSec":N}` entries) loaded in both `-p` and interactive runs, once the directory is trusted.
 Events observed in an interactive run, in order, each receiving a JSON object on stdin that carries `sessionId`, `timestamp`, and `cwd`:
 
 ```text
@@ -70,7 +65,9 @@ On an idle agent with history the first Escape rendered `esc again to rewind` an
 
 ## Launch
 
-`copilot --allow-all --no-auto-update --plugin-dir <dir> -i "<prompt>"` in a fresh, never-trusted directory auto-submitted the prompt, showed `YOLO` in the footer, and raised no trust or permission dialog.
+`copilot --allow-all --no-auto-update -i "<prompt>"` in a never-trusted temporary directory stopped at `Do you trust the files in this folder?` with the prompt unsent, so `--allow-all` alone is not enough.
+With `COPILOT_ALLOW_ALL=true` in the environment the same launch showed no dialog, auto-submitted the prompt, and delivered the plugin's hooks (`busy copilot-hook` at 4.0 s, `idle copilot-hook` at 9.5 s).
+An earlier observation of "no dialog" came from a directory already in Copilot's trusted-folder list and is withdrawn.
 `--model bogus-model` exited at launch with `Error: Model "bogus-model" from --model flag is not available.`
 `--reasoning-effort xhigh` on `gpt-6-luna` and `--reasoning-effort max` on `claude-sonnet-5.5` were accepted.
 No catalog listing command was found, so the spawn does not pre-validate the model.

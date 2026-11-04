@@ -36,6 +36,7 @@ pid, fd = pty.fork()
 if pid == 0:
     os.chdir(work)
     os.environ['TERM'] = 'xterm-256color'
+    os.environ['COPILOT_ALLOW_ALL'] = 'true'
     os.execvp('copilot', ['copilot', '--allow-all', '--no-auto-update', '--plugin-dir', plugin] + extra + ['-i', 'Reply with the single word PONG'])
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 45, 140, 0, 0))
 def pump(t):
@@ -48,35 +49,55 @@ def pump(t):
             except OSError:
                 return False
     return True
-def settled():
-    rec = os.path.join(state, 'live.busy-state')
+def rec():
     try:
-        return ' state=idle ' in open(rec).read()
+        return open(os.path.join(state, 'live.busy-state')).read()
     except OSError:
-        return False
+        return ''
+# The arm wrote busy from fm-spawn; only the vendor's own userPromptSubmitted
+# delivery can produce state=busy from copilot-hook, so watch for exactly that.
+seen_busy = False
 deadline = time.time() + 120
-while time.time() < deadline and not settled():
-    pump(1)
+while time.time() < deadline:
+    r = rec()
+    if ' state=busy ' in r and ' source=copilot-hook ' in r:
+        seen_busy = True
+    if seen_busy and ' state=idle ' in r:
+        break
+    pump(0.2)
 comm = open('/proc/%d/comm' % pid).read().strip()
 argv0 = open('/proc/%d/cmdline' % pid, 'rb').read().split(b'\0')[0].decode()
-print('%s\t%s' % (comm, argv0), flush=True)
+print('%s\t%s\t%s' % (comm, argv0, 'busy-seen' if seen_busy else 'busy-missed'), flush=True)
 pump(2)
 os.write(fd, b'/exit'); pump(1); os.write(fd, b'\r')
 pump(15)
-try:
+done = 0
+for _ in range(100):
+    done, status = os.waitpid(pid, os.WNOHANG)
+    if done: break
+    time.sleep(0.1)
+if not done:
     os.kill(pid, signal.SIGKILL)
-except OSError:
-    pass
+    os.waitpid(pid, 0)
+    print('exit-timeout', flush=True)
+else:
+    print('exit-%d' % (os.waitstatus_to_exitcode(status)), flush=True)
 PY
 )
 identity=$(cd "$LAB" && python3 -I -c "$driver" "$STATE" "$STATE/live.copilot-plugin" "$WORK" "${model_args[@]}") \
   || fail 'driver failed'
+exit_note=$(printf '%s\n' "$identity" | tail -1)
+identity=$(printf '%s\n' "$identity" | head -1)
 comm=${identity%%$'\t'*}
-argv0=${identity#*$'\t'}
+rest=${identity#*$'\t'}
+argv0=${rest%%$'\t'*}
+busy_note=${rest#*$'\t'}
+[ "$busy_note" = busy-seen ] || fail 'a real prompt never produced busy copilot-hook (userPromptSubmitted not delivered)'
+[ "$exit_note" = exit-0 ] || fail "/exit did not end copilot cleanly: $exit_note"
 [ "$(fm_agent_process_classify "$comm" "$argv0" "$argv0")" = agent ] \
   || fail "liveness did not recognize the live process (comm=$comm argv0=$argv0)"
 echo "ok - $VERSION: live process comm=$comm argv0=$argv0 classified as an agent"
 [ "$(fm_busy_classify tmux fake:w copilot live "$STATE")" = 'idle copilot-hook' ] \
   || fail "busy record did not end idle: $(cat "$STATE/live.busy-state" 2>/dev/null)"
 assert_present "$STATE/live.turn-ended" 'agentStop raised no turn-end notification'
-echo "ok - $VERSION: userPromptSubmitted opened the turn, agentStop closed it and raised the turn-end notification"
+echo "ok - $VERSION: a real prompt produced busy copilot-hook, agentStop closed it and raised the turn-end notification, /exit ended cleanly"
