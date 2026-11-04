@@ -27,8 +27,9 @@ gen=$("$ROOT/bin/fm-busy-event.sh" arm "$STATE" live) || fail 'busy arm failed'
 # busy, until the driver has seen that record and touched the release file. The
 # latest-value record file can then never be missed by sampling.
 RELEASE="$LAB/release"
+release_q=$(printf '%q' "$RELEASE")
 hooks="$STATE/live.copilot-plugin/hooks/hooks.json"
-jq --arg wait "; n=0; while [ ! -e '$RELEASE' ] && [ \$n -lt 600 ]; do sleep 0.1; n=\$((n+1)); done" \
+jq --arg wait "; n=0; while [ ! -e $release_q ] && [ \$n -lt 600 ]; do sleep 0.1; n=\$((n+1)); done" \
   '.hooks.userPromptSubmitted[0].bash += $wait | .hooks.userPromptSubmitted[0].timeoutSec = 90' "$hooks" > "$hooks.new" \
   || fail 'handshake wiring failed'
 mv "$hooks.new" "$hooks" || fail 'handshake wiring failed'
