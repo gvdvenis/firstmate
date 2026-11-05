@@ -3,13 +3,23 @@
 Verified on 2026-11-04 on Linux (WSL2) with `GitHub Copilot CLI 1.0.105.` through a real pty.
 The [adapter reference](../../.agents/skills/harness-adapters/references/harness/copilot.md) owns operating limits; the [spawn header](../../bin/fm-spawn.sh) owns launch mechanics.
 Primary, secondmate, and every backend other than tmux and Herdr are unsupported and refused.
+Vendor observations marked as a pty were made through a private pty; the Herdr trial section records what a real pane showed.
 
-## Not exercised
+## Real Herdr pane trial
 
-Neither tmux nor Herdr has run a real Copilot pane: this host has no tmux, and Herdr lifecycle commands were out of scope for the task.
-Everything vendor-side was observed through a private pty, and the backend side is covered only by the portable regression with simulated process readings and fake executables.
-The spawn accepts tmux and Herdr because they share the backend-neutral code that regression pins (argv[0] liveness, the recorded-harness composer read, screen-gated interrupt arming), not because a pane run proved them.
-Do not treat either placement as verified until a supervised spawn, steer, interrupt, exit, and cleanup has run on it.
+On 2026-11-05 a supervised Copilot ship worker ran in a real Herdr pane (`fm-spawn.sh` launch, brief pickup, status reports, and the busy and idle hook records all worked).
+The trial exposed two defects that the private-pty observations had hidden, both now fixed and re-checked on that pane:
+
+- A real pane draws the composer as a block-glyph box (`╻▄▄▄…` above, `┃`-led input rows, `╹▀▀▀…` below), with no `❯`; an empty composer is a bare `┃` and a draft is `┃ text`. The composer read previously knew only the `❯` between `─` rules a plain pty draws, so `fm-control exit` refused with an unprovable composer. Both shapes are read now, pinned by the real captures in `tests/captures/copilot-1.0.105-herdr`.
+- The armed footer `esc again to interrupt` stays visible for about 0.5 s after the first Escape (measured by polling the pane), shorter than the earlier 0.5 s press gap plus a read, so the second Escape never fired and `fm-control interrupt` returned `not-running`. The press gap is now 0.05 s; the armed proof, not the gap, keeps an idle agent out of the rewind picker, which renders `again to rewind`.
+
+After the fixes, on the same pane: `fm-control interrupt` on a busy turn delivered both presses and the pane printed `Operation cancelled by user` (claim `cancel=unconfirmed`, as for every adapter without a recorded cancel signal), and `fm-control exit` stopped the agent with the pane returning to its shell and printing `Resume copilot --resume=<session-id>`.
+Steer delivery through `fm-send` was also used on that pane to start the busy turn.
+
+## Still not exercised
+
+No tmux host was available, so a Copilot pane on tmux has not run; that placement rests on the backend-neutral code and the portable regression with simulated process readings.
+Relaunch after an exit, teardown of the trial, and secondmate use were not exercised.
 
 ## Reusable guards
 

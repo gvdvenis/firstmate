@@ -209,7 +209,12 @@ fm_control_interrupt_arm_signal() {  # <harness>
 # did not at 0.6 s, Command Code 1.74.1).
 fm_control_interrupt_press_gap() {  # <harness>
   case "${1-}" in
-    devin|commandcode|copilot) printf '0.5' ;;
+    devin|commandcode) printf '0.5' ;;
+    # copilot's armed footer (`esc again to interrupt`) stays up for only about
+    # half a second (measured on a real Herdr pane), so the second press follows
+    # the proof at once; the proof, not the gap, is what keeps an idle agent out
+    # of the rewind picker (it renders `again to rewind` instead).
+    copilot) printf '0.05' ;;
     claude|codex|opencode|pi|pi-signed|omp|grok|kimi|cursor|gemini|muse|rovo|agy|cortex|kiro|hermes) printf '0.2' ;;
     *) return 1 ;;
   esac
