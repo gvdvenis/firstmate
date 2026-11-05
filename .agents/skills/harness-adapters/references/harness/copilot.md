@@ -1,7 +1,9 @@
 # GitHub Copilot CLI
 
 Copilot is a spawned crewmate/scout TUI adapter on tmux and Herdr only.
-Primary and secondmate supervision and every other runtime backend are unsupported and refused. A real Herdr pane has run it; tmux has not.
+Primary and secondmate supervision and every other runtime backend are unsupported and refused.
+A real Herdr pane and a real tmux pane have each run it with Copilot CLI 1.0.105 on 2026-11-05.
+On tmux, launch, interrupt, exit, relaunch, and teardown were exercised; on Herdr, launch, interrupt, and exit were, and relaunch and teardown were not.
 [Copilot verification](../../../../../docs/verification/copilot.md) owns dated vendor evidence and what the backends have not yet exercised.
 
 ## Operating facts

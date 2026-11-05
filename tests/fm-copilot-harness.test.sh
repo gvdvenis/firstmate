@@ -100,6 +100,15 @@ for locale_name in C C.UTF-8; do
   [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$cap/busy-empty.pane")")" = empty ] || fail "real working composer not empty under LC_ALL=$locale_name"
   [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$cap/busy-draft.pane")")" = pending ] || fail "real draft not preserved under LC_ALL=$locale_name"
 done
+# Real captures from a live tmux pane (tests/captures/copilot-1.0.105-tmux): the
+# plain rule-bounded `❯` composer at 200 columns, with a status row above it.
+tcap="$ROOT/tests/captures/copilot-1.0.105-tmux"
+for locale_name in C C.UTF-8; do
+  for pane in idle busy-empty after-interrupt idle-after-relaunch; do
+    [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$tcap/$pane.pane")")" = empty ] || fail "real tmux $pane composer not empty under LC_ALL=$locale_name"
+  done
+  [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$tcap/idle-draft.pane")")" = pending ] || fail "real tmux draft not preserved under LC_ALL=$locale_name"
+done
 # A byte-based awk (mawk, or LC_ALL=C) must still match a normal-width rule.
 export FM_COMPOSER_HARNESS=copilot
 for awk_locale in C C.UTF-8; do
@@ -210,7 +219,7 @@ for backend in zellij cmux orca; do
   if out=$(FM_FAKE_LAUNCH_LOG="$case_dir/copilot-$backend.launch" fm_test_run_spawn "$home" "$wt" "$fakebin" "copilot-$backend" "$proj" \
     --scout --harness copilot --backend "$backend" 2>&1)
   then fail "Copilot launch accepted on backend=$backend"; fi
-  assert_contains "$out" "copilot is enabled only on tmux and herdr; real-pane verification is pending; backend=$backend" "wrong refusal on $backend: $out"
+  assert_contains "$out" "copilot is enabled only on tmux and herdr; backend=$backend has no verified Copilot pane" "wrong refusal on $backend: $out"
   assert_absent "$case_dir/copilot-$backend.launch" "Copilot launched on $backend"
   assert_absent "$home/state/copilot-$backend.meta" "refused $backend spawn left a task record"
   assert_absent "$home/state/copilot-$backend.busy-gen" "refused $backend spawn armed busy state"

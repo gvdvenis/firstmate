@@ -3281,12 +3281,11 @@ fi
 
 # Copilot's composer shape is read from the recorded harness name and its
 # interrupt arming needs a visible-screen read between presses. Both rest on
-# backend-neutral code that tmux and Herdr share; no real Copilot pane has run
-# on either yet (docs/verification/copilot.md says exactly what was exercised),
-# so every other spawn-capable backend is refused before any endpoint or record
-# exists.
+# backend-neutral code that tmux and Herdr share; a real Copilot pane has run on
+# each (docs/verification/copilot.md says exactly what was exercised), so every
+# other spawn-capable backend is refused before any endpoint or record exists.
 if [ "$HARNESS" = copilot ] && [ "$BACKEND" != tmux ] && [ "$BACKEND" != herdr ]; then
-  echo "error: copilot is enabled only on tmux and herdr; real-pane verification is pending; backend=$BACKEND is unproven for its composer and interrupt reads. Select backend tmux or herdr." >&2
+  echo "error: copilot is enabled only on tmux and herdr; backend=$BACKEND has no verified Copilot pane for its composer and interrupt reads. Select backend tmux or herdr." >&2
   exit 1
 fi
 

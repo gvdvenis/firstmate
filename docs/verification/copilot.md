@@ -7,19 +7,39 @@ Vendor observations marked as a pty were made through a private pty; the Herdr t
 
 ## Real Herdr pane trial
 
-On 2026-11-05 a supervised Copilot ship worker ran in a real Herdr pane (`fm-spawn.sh` launch, brief pickup, status reports, and the busy and idle hook records all worked).
-The trial exposed two defects that the private-pty observations had hidden, both now fixed and re-checked on that pane:
+On 2026-11-05 a supervised Copilot 1.0.105 ship worker ran in a real Herdr pane: the `fm-spawn.sh` launch, brief pickup, status reports, and the busy and idle hook records all worked.
+Steer delivery through `fm-send` started a busy turn on that pane.
 
-- A real pane draws the composer as a block-glyph box (`╻▄▄▄…` above, `┃`-led input rows, `╹▀▀▀…` below), with no `❯`; an empty composer is a bare `┃` and a draft is `┃ text`. The composer read previously knew only the `❯` between `─` rules a plain pty draws, so `fm-control exit` refused with an unprovable composer. Both shapes are read now, pinned by the real captures in `tests/captures/copilot-1.0.105-herdr`.
-- The armed footer `esc again to interrupt` stays visible for about 0.5 s after the first Escape (measured by polling the pane), shorter than the earlier 0.5 s press gap plus a read, so the second Escape never fired and `fm-control interrupt` returned `not-running`. The press gap is now 0.05 s; the armed proof, not the gap, keeps an idle agent out of the rewind picker, which renders `again to rewind`.
+- A real pane draws the composer as a block-glyph box (`╻▄▄▄…` above, `┃`-led input rows, `╹▀▀▀…` below), with no `❯`. An empty composer is a bare `┃` and a draft is `┃ text`. The plain pty shape (`❯` between `─` rules) is read as well, and both are pinned by the real captures in `tests/captures/copilot-1.0.105-herdr`.
+- The armed footer `esc again to interrupt` stays visible for about 0.5 s after the first Escape (measured by polling the pane), so the control plane sends the second Escape 0.05 s after the first. The armed proof keeps an idle agent out of the rewind picker, which renders `again to rewind`.
+- `fm-control interrupt` on a busy turn delivered both presses and the pane printed `Operation cancelled by user` (claim `cancel=unconfirmed`, as for every adapter without a recorded cancel signal).
+- `fm-control exit` stopped the agent, and the pane returned to its shell and printed `Resume copilot --resume=<session-id>`.
 
-After the fixes, on the same pane: `fm-control interrupt` on a busy turn delivered both presses and the pane printed `Operation cancelled by user` (claim `cancel=unconfirmed`, as for every adapter without a recorded cancel signal), and `fm-control exit` stopped the agent with the pane returning to its shell and printing `Resume copilot --resume=<session-id>`.
-Steer delivery through `fm-send` was also used on that pane to start the busy turn.
+## Real tmux pane trial
+
+On 2026-11-05 Copilot CLI 1.0.105 ran as a real scout on tmux 3.7c (Linux, WSL2) through `fm-spawn.sh --scout --harness copilot --backend tmux`, in a scratch Firstmate home with a private tmux socket and a local-origin project, so no real fleet state or Herdr was touched.
+Every step below used the real control plane against the live pane and found no defect in the adapter:
+
+- **Launch:** the worker started in a never-trusted worktree with no trust dialog, picked up its brief, ran a foreground `sleep 240` shell tool, wrote its report, and appended `done`. `#{pane_current_command}` read `copilot`.
+- **Busy record:** `userPromptSubmitted` opened a `copilot-hook` busy record, and `agentStop` closed it after the finished turn.
+- **Interrupt:** `fm-control interrupt` on the busy turn returned `interrupt-delivered … verified=agent-alive cancel=unconfirmed`, and the pane printed `Operation cancelled by user` with the composer back to a bare `❯`. As the reference records, `agentStop` does not fire after a cancel, so the busy record stayed open until the next prompt.
+- **Exit:** `fm-control exit` returned `stopped`; the pane fell back to its login shell and printed `Resume copilot --resume=<session-id>`.
+- **Relaunch:** `fm-control relaunch` (a scout requires `--note`) started a replacement agent in the same window and worktree; it re-armed the busy record, picked up the note, wrote its report, and the record closed at `agentStop`.
+- **Teardown:** `fm-teardown.sh` on a finished scout returned the worktree and closed the backlog item. It reported the pane's own login shell as a leaked worktree process and removed it; no `copilot` process survived `/exit` (checked by scanning process working directories before and after).
+- **Draft safety:** with `zzdraft words` typed and not submitted, `fm-control exit` refused because the composer holds pending text, and the agent kept running.
+
+On tmux a pane draws the plain rule-bounded `❯` composer with a status row above the top rule, not the Herdr block-glyph box, and both shapes classify correctly.
+The real screens are in `tests/captures/copilot-1.0.105-tmux` and pinned by `tests/fm-copilot-harness.test.sh`.
+Two incidental observations are not adapter defects: `fm-spawn` and `fm-teardown` printed a "worktree tangle" banner because the code root was itself a feature-branch checkout, and a "watcher down" banner because the scratch home has no supervision cycle.
+
+## Full-suite and live-guard run
+
+SUITE_RESULT_PLACEHOLDER
 
 ## Still not exercised
 
-No tmux host was available, so a Copilot pane on tmux has not run; that placement rests on the backend-neutral code and the portable regression with simulated process readings.
-Relaunch after an exit, teardown of the trial, and secondmate use were not exercised.
+Relaunch after an exit and teardown were exercised on tmux only, not on Herdr.
+Subagent turns, native slash skills, and secondmate use were not exercised.
 
 ## Reusable guards
 
