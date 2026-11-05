@@ -56,6 +56,10 @@ pass "Copilot argv[0] identity beats foreign markers; anchored liveness"
 [ "$(fm_control_interrupt_key copilot)" = Escape ] || fail 'wrong interrupt key'
 [ "$(fm_control_interrupt_repeat copilot)" = 2 ] || fail 'Copilot interrupts on a double Escape'
 [ "$(fm_control_interrupt_arm_signal copilot)" = 'again to interrupt' ] || fail 'second Escape must wait for the armed proof'
+# The armed footer lives about half a second on a real Herdr pane, so the second
+# press must follow the proof almost at once.
+awk -v g="$(fm_control_interrupt_press_gap copilot)" 'BEGIN{exit !(g <= 0.1)}' || fail 'Copilot press gap outlives its armed footer'
+printf ' ◉ Working · 824 B esc again to interrupt\n' | grep -Eq "$(fm_control_interrupt_arm_signal copilot)" || fail 'real armed footer not recognized'
 [ -n "$(fm_control_interrupt_hazard_signal copilot)" ] || fail 'rewind picker hazard missing'
 [ -z "$(fm_control_interrupt_clear_key copilot)" ] || fail 'Copilot must not erase a composer draft'
 [ "$(fm_control_interrupt_ack_source copilot)" = none ] || fail 'agentStop is not an interrupt acknowledgement'
@@ -88,6 +92,14 @@ busy=$(screen '❯' | sed '$d'; printf '%s\n' ' ◎ Working esc esc interrupt   
 picker=$(printf '%s\n' ' Rewind to a previous point' '' '   ❯ Reply with the single word PONG' '' ' ↑↓ Navigate · Enter Select · Esc Cancel')
 [ "$(fm_composer_classify_screen "$caps" "$picker")" = unknown ] || fail 'rewind picker read as a composer'
 [ "$(fm_composer_classify_screen "$caps" "$(printf '%s\n' 'ordinary shell output' '$ ')")" = unknown ] || fail 'a shell read as a composer'
+# Real captures from a live Herdr pane (tests/captures/copilot-1.0.105-herdr):
+# the block-glyph box, with no `❯`, that a real pane draws.
+cap="$ROOT/tests/captures/copilot-1.0.105-herdr"
+for locale_name in C C.UTF-8; do
+  [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$cap/idle.pane")")" = empty ] || fail "real idle composer not empty under LC_ALL=$locale_name"
+  [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$cap/busy-empty.pane")")" = empty ] || fail "real working composer not empty under LC_ALL=$locale_name"
+  [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$cap/busy-draft.pane")")" = pending ] || fail "real draft not preserved under LC_ALL=$locale_name"
+done
 # A byte-based awk (mawk, or LC_ALL=C) must still match a normal-width rule.
 export FM_COMPOSER_HARNESS=copilot
 for awk_locale in C C.UTF-8; do

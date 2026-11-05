@@ -670,6 +670,10 @@
       "audience": "maintainer-verification"
     },
     {
+      "path": "tests/captures/copilot-1.0.105-herdr/README.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": ".agents/skills/agent-skill-trigger-index/SKILL.md",
       "audience": "agent-runtime"
     },
