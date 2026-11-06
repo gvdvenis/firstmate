@@ -43,6 +43,31 @@ On 2026-11-05 and 2026-11-06, with Copilot CLI 1.0.105 and tmux 3.7c on Linux (W
 
 The failing scripts are `fm-backend-t3code`, `fm-captain-hold-lifecycle`, `fm-lint`, `fm-pr-merge`, `fm-test-run`, `fm-backlog-atomicity`, `fm-control-relaunch`, `fm-procevent`, `fm-record-export`, `fm-watcher-lock`, `fm-jev-mem-guard`, `fm-spawn-orca-worktree`, `fm-lint-workflows`, `fm-backend-tmux-smoke`, `fm-public-followup`, `fm-nm-test-contract`, `fm-ci-workflow`, and `fm-session-lock-ancestry`, plus `fm-claude-stop-autoarm`, which passed on rerun.
 
+## Folder trust options
+
+On 2026-11-06 each route below was run in a real tmux 3.7c pane against a scratch git project that carried a project hook (`.github/hooks`), a project skill, and a project MCP server (`.mcp.json`), with a prompt of `reply with the word ok` and the plugin hook from this adapter.
+Each cell is what the pane and the hook logs showed.
+
+| Route | Starts unattended | Plugin hooks deliver | Project hooks and MCP load | Real `~/.copilot` untouched |
+|---|---|---|---|---|
+| `COPILOT_ALLOW_ALL=true` (previous launch) | yes | yes | yes | no (login state, sessions, logs) |
+| `COPILOT_ALLOW_ALL=1` plus answering `1. Yes` | no (dialog until answered) | yes | yes | no |
+| `COPILOT_ALLOW_ALL=1` plus declining (`Esc`) | no | the agent exits with a blank pane | not applicable | not applicable |
+| per-task `COPILOT_HOME` with `trustedFolders` seeded (shipped) | yes | yes | yes | yes |
+| per-task `COPILOT_HOME` plus `{"disableAllHooks":true}` in its `settings.json` | yes | yes | yes | yes |
+
+- `COPILOT_ALLOW_ALL` accepts several truthy spellings, but only exactly `true` trusts the directory (`copilot help environment`); `1` with `--allow-all` showed the dialog `Do you trust the files in this folder?` with `1. Yes`, `2. Yes, and remember this folder for future sessions`, and `3. No (Esc)`.
+- `1. Yes` is session-only and did not write the real `config.json`, but trusting the folder is what loads project hooks and MCP servers, so it gives no isolation over the previous launch.
+- Declining closed the agent, so the dialog cannot be used to keep project configuration out.
+- `--trust-folder` is documented for one new prompt-mode session only and was not tried with `-i`.
+- The setting `disableAllHooks` read back as `true` from the task home, yet the project hook and the plugin hook both still fired in a `-p` run and an interactive run, so it does not suppress them in 1.0.105.
+- A relocated `COPILOT_HOME` is a fresh directory (`config.json` only, then logs, sessions and `installed-plugins` as the run creates them), so the captain's user-level hooks, plugins, and skills (a real pane showed `4 plugins, 6 hooks, 64 skills`) stay out of the worker.
+- Login worked in a relocated, empty home for `-p` and for the interactive pane: the credential is a `keyring:<host>:<account>@copilot-cli` entry in the OS keyring, not a file under `~/.copilot`.
+- A host without an OS keyring may keep the token in `config.json` instead; that case was not exercised, and its worker would stop at a login prompt in the task home.
+- The model default of a fresh home differs from the captain's (`GPT-6.1 Sol` against `GPT-6 Luna`), so a task that cares passes `--model`.
+- A failing project MCP server holds the first prompt for about a minute (`Loading … still waiting`), which the previous launch also did.
+- No route avoids loading the worktree's own hooks, skills, and MCP servers once the worktree is trusted; the per-task home narrows trust to that worktree and keeps the user home out, which is the only improvement found.
+
 ## Still not exercised
 
 Relaunch after an exit and teardown were exercised on tmux only, not on Herdr.
@@ -104,6 +129,7 @@ On an idle agent with history the first Escape rendered `esc again to rewind` an
 
 `copilot --allow-all --no-auto-update -i "<prompt>"` in a never-trusted temporary directory stopped at `Do you trust the files in this folder?` with the prompt unsent, so `--allow-all` alone is not enough.
 With `COPILOT_ALLOW_ALL=true` in the environment the same launch showed no dialog, auto-submitted the prompt, and delivered the plugin's hooks (`busy copilot-hook` at 4.0 s, `idle copilot-hook` at 9.5 s).
+The shipped launch uses a per-task `COPILOT_HOME` instead; see Folder trust options.
 An earlier observation of "no dialog" came from a directory already in Copilot's trusted-folder list and is withdrawn.
 `--model bogus-model` exited at launch with `Error: Model "bogus-model" from --model flag is not available.`
 `--reasoning-effort xhigh` on `gpt-6-luna` and `--reasoning-effort max` on `claude-sonnet-5.5` were accepted.

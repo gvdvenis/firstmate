@@ -166,7 +166,17 @@ wiring=$(fm_control_harness_wiring_paths copilot /unused "$state" worker)
 case "$wiring" in *"$hooks"*"$plugin/plugin.json"*) ;; *) fail "plugin retirement paths missing: $wiring" ;; esac
 ! "$ROOT/bin/fm-copilot-plugin.sh" "$state" 'bad id' "$gen" 2>/dev/null || fail 'invalid task id accepted'
 jq -e . "$hooks" >/dev/null || fail 'failed write replaced a valid plugin'
-pass "private plugin lifecycle and stale-generation rejection"
+wt_home="$TMP_ROOT/trusted wt"
+mkdir -p "$wt_home"
+"$ROOT/bin/fm-copilot-plugin.sh" "$state" worker "$gen" "$wt_home" || fail 'home seeding failed'
+cop_home="$state/worker.copilot-home"
+[ "$(stat -c %a "$cop_home" 2>/dev/null || stat -f %Lp "$cop_home")" = 700 ] || fail 'copilot home is not private'
+jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.trustedFolders == [$wt]' "$cop_home/config.json" >/dev/null || fail 'seed does not trust only the worktree'
+# Copilot rewrites config.json with a comment header and its own keys; a relaunch must keep them and still trust the worktree.
+printf '// managed\n{"trustedFolders":["/elsewhere"],"firstLaunchAt":"x"}\n' > "$cop_home/config.json"
+"$ROOT/bin/fm-copilot-plugin.sh" "$state" worker "$gen" "$wt_home" || fail 'home reseed failed'
+jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.firstLaunchAt == "x" and .trustedFolders == [$wt]' "$cop_home/config.json" >/dev/null || fail 'reseed lost keys or kept a stale trust entry'
+pass "private plugin, trusted home, lifecycle and stale-generation rejection"
 
 case_dir="$TMP_ROOT/spawn"
 fakebin=$(make_spawn_fakebin "$case_dir/fake" claude)
@@ -181,7 +191,10 @@ if ! out=$(FM_FAKE_LAUNCH_LOG="$case_dir/launch" fm_test_run_spawn "$home" "$wt"
 then fail "spawn failed: $out"; fi
 launch=$(cat "$case_dir/launch")
 assert_contains "$launch" '--allow-all' 'autonomy flag missing'
-assert_contains "$launch" 'COPILOT_ALLOW_ALL=true' 'folder trust switch missing (the dialog would hold the prompt)'
+assert_contains "$launch" "COPILOT_HOME='$home/state/copilot-worker.copilot-home'" 'per-task Copilot home missing'
+case "$launch" in *COPILOT_ALLOW_ALL*) fail 'launch trusts every directory through COPILOT_ALLOW_ALL' ;; esac
+jq -e --arg wt "$(cd "$wt" && pwd -P)" '.trustedFolders == [$wt]' "$home/state/copilot-worker.copilot-home/config.json" >/dev/null \
+  || fail 'per-task home does not trust exactly the worktree'
 assert_contains "$launch" '--no-auto-update' 'auto-update not disabled'
 assert_contains "$launch" "--plugin-dir '$home/state/copilot-worker.copilot-plugin'" 'private plugin missing'
 assert_contains "$launch" "--model 'claude-sonnet-5.5'" 'model lost'
@@ -204,7 +217,7 @@ if ! out=$(FM_FAKE_LAUNCH_LOG="$case_dir/launch-low" fm_test_run_spawn "$home" "
 then fail "low-effort spawn failed: $out"; fi
 case "$(cat "$case_dir/launch-low")" in *"--model"*) fail 'a model flag appeared with no model requested' ;; esac
 assert_contains "$(cat "$case_dir/launch-low")" "--reasoning-effort 'low'" 'low effort lost'
-pass "scout launch carries autonomy, plugin, typed brief and hooks; secondmate refused"
+pass "scout launch carries autonomy, trusted home, plugin, typed brief and hooks; secondmate refused"
 
 # The composer and interrupt reads are proven only on tmux and Herdr, so every
 # other spawn-capable backend is refused before any endpoint, worktree, or busy
