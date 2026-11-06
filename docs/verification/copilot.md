@@ -73,9 +73,22 @@ Each cell is what the pane and the hook logs showed.
 On 2026-11-06, in a real tmux pane with a per-task `COPILOT_HOME`, the slash popup listed a project skill from `.github/skills` as `/projskill` and a skill from a `--plugin-dir` plugin as `/<plugin>:<skill>`.
 Submitting either rendered `skill(<name>)` and the skill's reply.
 `bin/fm-send.sh <task> '/labskill'` against a spawned scout whose worktree carried `.agents/skills/labskill` took the typed plane, submitted without a stuck popup, and produced `skill(labskill)` and the expected reply.
-Project skills are discovered from `.agents/skills`, `.github/skills`, and `.claude/skills` (`copilot skill list --help`).
+Project skills are discovered from `.agents/skills`, `.github/skills`, and `.claude/skills` (`copilot skill --help`).
 The captain's real `~/.copilot` listed 64 skills in one project, including installed-plugin skills and a personal skill reached through `skillDirectories`, while a relocated home listed only the project skill and two builtin skills.
 Firstmate's own skills are read by path from the brief, so a worker does not depend on the inherited list.
+
+## Hook decision facts
+
+On 2026-11-06, with a plugin hook file and a relocated `COPILOT_HOME` in a real tmux pane, these hook results were observed.
+They bear on a Copilot primary, which remains unsupported.
+
+- `preToolUse` printing `{"permissionDecision":"deny","permissionDecisionReason":"..."}` stopped a shell command from running under `--allow-all`, and the pane showed `Denied by preToolUse hook: <reason>`.
+- `preToolUse` exiting 2 also denied, with the generic reason `hook exited with code 2`; its stderr was not shown.
+- `agentStop` printing `{"decision":"block","reason":"..."}` queued the reason as a follow-up message and ran another turn, whose own stop carried `stop_hook_active: true`; exiting 2 with stderr only printed a warning line.
+- An always-blocking `agentStop` produced 8 continuations and then let the turn end.
+- Copilot waited synchronously for an `agentStop` hook: a 75 s sleep with `timeoutSec: 200` held the stop and its block decision was honoured, and a `.claude/settings.json` Stop hook marked `asyncRewake` was awaited the same way.
+- `sessionStart` printing `{"additionalContext":"..."}` put that text in front of the model before its first reply.
+- Copilot also loads a trusted project's `.claude/settings.json` hooks and delivers Claude-shaped payloads (`tool_name` `Bash`, `tool_input.command`, `hook_event_name`) with `CLAUDE_PROJECT_DIR`, `COPILOT_CLI`, and `COPILOT_PROJECT_DIR` set for the hook.
 
 ## Teardown of a live worker
 
