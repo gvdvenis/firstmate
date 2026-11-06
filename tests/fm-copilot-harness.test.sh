@@ -195,6 +195,7 @@ assert_contains "$launch" "COPILOT_HOME='$home/state/copilot-worker.copilot-home
 case "$launch" in *COPILOT_ALLOW_ALL*) fail 'launch trusts every directory through COPILOT_ALLOW_ALL' ;; esac
 jq -e --arg wt "$(cd "$wt" && pwd -P)" '.trustedFolders == [$wt]' "$home/state/copilot-worker.copilot-home/config.json" >/dev/null \
   || fail 'per-task home does not trust exactly the worktree'
+assert_contains "$launch" '--no-ask-user' 'ask_user tool not disabled'
 assert_contains "$launch" '--no-auto-update' 'auto-update not disabled'
 assert_contains "$launch" "--plugin-dir '$home/state/copilot-worker.copilot-plugin'" 'private plugin missing'
 assert_contains "$launch" "--model 'claude-sonnet-5.5'" 'model lost'

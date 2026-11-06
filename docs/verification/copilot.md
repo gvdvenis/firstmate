@@ -5,6 +5,14 @@ The [adapter reference](../../.agents/skills/harness-adapters/references/harness
 Primary, secondmate, and every backend other than tmux and Herdr are unsupported and refused.
 Vendor observations marked as a pty were made through a private pty; the Herdr trial section records what a real pane showed.
 
+## Unanswerable questions
+
+On 2026-11-07, two real tmux 3.7c panes ran Copilot 1.0.105 with the same prompt, which told the model to use its `ask_user` tool and then append a line to a status file with a shell command.
+Without `--no-ask-user` the pane showed `Asking user`, a `Copilot needs information` picker with `red`, `blue`, and `Other (type your answer)`, and waited with no status line written.
+With `--no-ask-user` the model reported that no question tool was available, decided alone, appended its status line, and finished with no picker.
+`copilot --help` lists the flag as `--no-ask-user` (disable the `ask_user` tool; the agent works autonomously without asking questions).
+The shipped launch passes it, and the ordinary shell tool and status-line appends are unaffected.
+
 ## Real Herdr pane trial
 
 On 2026-11-05 a supervised Copilot 1.0.105 ship worker ran in a real Herdr pane: the `fm-spawn.sh` launch, brief pickup, status reports, and the busy and idle hook records all worked.

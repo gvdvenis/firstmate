@@ -3117,7 +3117,9 @@ launch_template() {
   # the captain's ~/.copilot stays untouched and login still works because the
   # credential lives in the OS keyring keyed by account, not in that directory.
   # Trusting the worktree still loads its own project hooks, skills and MCP
-  # servers; no setting found suppresses that. --no-auto-update keeps a worker from
+  # servers; no setting found suppresses that. --no-ask-user removes the ask_user
+  # tool, so an unattended worker decides alone instead of holding on a question
+  # nobody answers (verified, copilot 1.0.105). --no-auto-update keeps a worker from
   # swapping its own binary mid-task. --plugin-dir loads the private per-task
   # plugin (bin/fm-copilot-plugin.sh) carrying the lifecycle hooks, which is the
   # only per-task hook channel: every other hook source is a user or project
@@ -3126,7 +3128,7 @@ launch_template() {
   # whenever that variable is set. Copilot publishes no identity marker of its
   # own, so ancestry decides (its kernel process name is MainThread, argv[0] is
   # copilot).
-  copilot) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI COPILOT_HOME=__COPILOTHOME__ __COPILOTBIN__ --allow-all --no-auto-update --plugin-dir __COPILOTPLUGIN__ __MODELFLAG____EFFORTFLAG__-i "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  copilot) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI COPILOT_HOME=__COPILOTHOME__ __COPILOTBIN__ --allow-all --no-ask-user --no-auto-update --plugin-dir __COPILOTPLUGIN__ __MODELFLAG____EFFORTFLAG__-i "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Hermes's native interactive query starts a visible TUI, never one-shot.
   hermes) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI FM_HERMES_HARNESS=hermes HERMES_HOME=__HERMESHOME__ HERMES_MANAGED_DIR=__HERMESHOOKS__ __HERMESBIN__ __HERMESPROFILE__chat --tui --yolo --accept-hooks -q "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Kimi Code rejects a positional prompt, so it launches bare and receives
