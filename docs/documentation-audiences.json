@@ -674,6 +674,10 @@
       "audience": "maintainer-verification"
     },
     {
+      "path": "tests/captures/copilot-1.0.105-tmux/README.md",
+      "audience": "maintainer-verification"
+    },
+    {
       "path": ".agents/skills/agent-skill-trigger-index/SKILL.md",
       "audience": "agent-runtime"
     },
