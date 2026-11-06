@@ -68,10 +68,19 @@ Each cell is what the pane and the hook logs showed.
 - A failing project MCP server holds the first prompt for about a minute (`Loading … still waiting`), which the previous launch also did.
 - No route avoids loading the worktree's own hooks, skills, and MCP servers once the worktree is trusted; the per-task home narrows trust to that worktree and keeps the user home out, which is the only improvement found.
 
+## Native slash skills
+
+On 2026-11-06, in a real tmux pane with a per-task `COPILOT_HOME`, the slash popup listed a project skill from `.github/skills` as `/projskill` and a skill from a `--plugin-dir` plugin as `/<plugin>:<skill>`.
+Submitting either rendered `skill(<name>)` and the skill's reply.
+`bin/fm-send.sh <task> '/labskill'` against a spawned scout whose worktree carried `.agents/skills/labskill` took the typed plane, submitted without a stuck popup, and produced `skill(labskill)` and the expected reply.
+Project skills are discovered from `.agents/skills`, `.github/skills`, and `.claude/skills` (`copilot skill list --help`).
+The captain's real `~/.copilot` listed 64 skills in one project, including installed-plugin skills and a personal skill reached through `skillDirectories`, while a relocated home listed only the project skill and two builtin skills.
+Firstmate's own skills are read by path from the brief, so a worker does not depend on the inherited list.
+
 ## Still not exercised
 
 Relaunch after an exit and teardown were exercised on tmux only, not on Herdr.
-Subagent turns, native slash skills, and secondmate use were not exercised.
+Subagent turns and secondmate use were not exercised.
 
 ## Reusable guards
 

@@ -19,7 +19,7 @@ On tmux, launch, interrupt, exit, relaunch, and teardown were exercised; on Herd
 | Identity | None published. The kernel process name is the thread name `MainThread`; only argv[0] `copilot` identifies it, matched by exact basename in [`fm-harness.sh`](../../../../../bin/fm-harness.sh) and [`fm-agent-process-lib.sh`](../../../../../bin/fm-agent-process-lib.sh). The spawn clears foreign markers such as `CLAUDECODE`. |
 | Composer | Two shapes, each with one footer row below and unchanged while a turn runs: a `❯` row between two full-width `─` rules (a plain pty), and the block-glyph box a real Herdr pane draws (`╻▄▄▄…`, `┃` input rows, `╹▀▀▀…`; empty is a bare `┃`). Read only when the caller names the recorded harness `copilot`, by `_fm_composer_copilot_state` in [`fm-composer-lib.sh`](../../../../../bin/fm-composer-lib.sh); more than one row between the rules reads `pending`, and a picker or dialog reads `unknown`. |
 | Herdr | Herdr's own `copilot` integration reports the pane identity and session, so the hooks here carry no Herdr reporting. |
-| Skills | Use ordinary text pointing at the installed skill's `SKILL.md`; native slash skill invocation has not been verified. |
+| Skills | `/<skill>` for a project skill (discovered from the worktree's `.agents/skills`, `.github/skills`, or `.claude/skills`) and `/<plugin>:<skill>` for a plugin skill; the model runs it as a `skill(<name>)` tool call. `fm-send` types a leading `/` on the typed plane, and the popup settle it already applies sufficed. Skills a captain configures in the real `~/.copilot` (`skillDirectories`, installed plugins) are not inherited by the per-task home. |
 
 ## Hook carrier
 
