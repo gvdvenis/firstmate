@@ -34,7 +34,14 @@ Two incidental observations are not adapter defects: `fm-spawn` and `fm-teardown
 
 ## Full-suite and live-guard run
 
-SUITE_RESULT_PLACEHOLDER
+On 2026-11-05 and 2026-11-06, with Copilot CLI 1.0.105 and tmux 3.7c on Linux (WSL2), the signed-in live guard and the whole portable suite were run from this branch.
+
+- `FM_COPILOT_SIGNALS_LIVE=1 bash bin/fm-test-run.sh tests/fm-copilot-signals-live-e2e.test.sh` passed without a gate skip (comm `MainThread`, argv[0] `copilot`, real prompt to `busy copilot-hook`, turn end, clean `/exit`).
+- `tests/fm-copilot-harness.test.sh` passed.
+- The portable lanes (`portable-parallel-1`, `portable-parallel-2`, and `portable-serial-1of11` through `-11of11`, with `tmux` on `PATH`) ran 316 scripts. 19 failed on the busy host, and a rerun of each failing script alone reproduced 18; `tests/fm-claude-stop-autoarm.test.sh` passed on rerun.
+- None of the failing scripts touches a Copilot file. The causes seen are missing host tools (`actionlint`, `ruby`, a `tasks-axi` build the captain-hold gate accepts), WSL process reparenting (listeners and pty hosts stay under the init subreaper), and a tmux smoke test whose shell never became ready. They were not compared against a clean upstream checkout.
+
+The failing scripts are `fm-backend-t3code`, `fm-captain-hold-lifecycle`, `fm-lint`, `fm-pr-merge`, `fm-test-run`, `fm-backlog-atomicity`, `fm-control-relaunch`, `fm-procevent`, `fm-record-export`, `fm-watcher-lock`, `fm-jev-mem-guard`, `fm-spawn-orca-worktree`, `fm-lint-workflows`, `fm-backend-tmux-smoke`, `fm-public-followup`, `fm-nm-test-contract`, `fm-ci-workflow`, and `fm-session-lock-ancestry`, plus `fm-claude-stop-autoarm`, which passed on rerun.
 
 ## Still not exercised
 
