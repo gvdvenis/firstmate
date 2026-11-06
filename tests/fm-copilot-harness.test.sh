@@ -217,6 +217,14 @@ if ! out=$(FM_FAKE_LAUNCH_LOG="$case_dir/launch-low" fm_test_run_spawn "$home" "
 then fail "low-effort spawn failed: $out"; fi
 case "$(cat "$case_dir/launch-low")" in *"--model"*) fail 'a model flag appeared with no model requested' ;; esac
 assert_contains "$(cat "$case_dir/launch-low")" "--reasoning-effort 'low'" 'low effort lost'
+# Teardown retires the whole per-task home and plugin directory with the rest of the task records.
+[ -d "$home/state/copilot-worker.copilot-home" ] || fail 'spawn did not create the per-task home'
+mkdir -p "$home/state/copilot-worker.copilot-home/session-state"
+if ! out=$(FM_ROOT_OVERRIDE='' FM_HOME="$home" HOME="$home/user-home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+  FM_PROJECTS_OVERRIDE="$home/projects" FM_CONFIG_OVERRIDE="$home/config" FM_SPAWN_NO_GUARD=1 TMUX='fake,1,0' PATH="$fakebin:$PATH" \
+  "$ROOT/bin/fm-teardown.sh" copilot-worker --force 2>&1); then fail "teardown failed: $out"; fi
+assert_absent "$home/state/copilot-worker.copilot-home" 'teardown left the per-task Copilot home'
+assert_absent "$home/state/copilot-worker.copilot-plugin" 'teardown left the plugin directory'
 pass "scout launch carries autonomy, trusted home, plugin, typed brief and hooks; secondmate refused"
 
 # The composer and interrupt reads are proven only on tmux and Herdr, so every

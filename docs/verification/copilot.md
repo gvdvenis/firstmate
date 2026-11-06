@@ -77,9 +77,19 @@ Project skills are discovered from `.agents/skills`, `.github/skills`, and `.cla
 The captain's real `~/.copilot` listed 64 skills in one project, including installed-plugin skills and a personal skill reached through `skillDirectories`, while a relocated home listed only the project skill and two builtin skills.
 Firstmate's own skills are read by path from the brief, so a worker does not depend on the inherited list.
 
+## Teardown of a live worker
+
+On 2026-11-06, in a scratch Firstmate home on a private tmux socket with a local-origin project, a Copilot scout was spawned with the per-task home, replied through a steer, and was torn down with `fm-teardown.sh` while its agent was still running.
+Teardown first refused until the scout's captain-call inventory was recorded, which is the ordinary scout gate.
+It then reaped the two worktree processes (the agent and its launcher), returned the worktree to the pool, and closed the window.
+A listing of the lab home before and after showed that only these records changed: the task's `busy-gen`, `busy-state`, `copilot-home` (with its sessions, logs, and `config.json`), `copilot-plugin`, `git-hooks`, `meta`, and `turn-ended` were removed, and the home's `terminal-outcomes` record was added.
+The task's `data/` directory, the project clone, and the other tmux window were untouched, no worker process survived, and no file under the captain's real `~/.copilot` was modified.
+A second scout was exited, relaunched with `fm-control relaunch --note`, and found with its per-task home preserved (a marker file inside it survived), the worktree still listed under `trustedFolders`, and no trust dialog; it was then torn down the same way.
+Herdr teardown is still unverified, and no Herdr command was run.
+
 ## Still not exercised
 
-Relaunch after an exit and teardown were exercised on tmux only, not on Herdr.
+Relaunch after an exit and teardown were exercised on tmux only, not on Herdr; Herdr teardown with the per-task home is unverified.
 Subagent turns and secondmate use were not exercised.
 
 ## Reusable guards
