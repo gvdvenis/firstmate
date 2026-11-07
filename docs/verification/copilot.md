@@ -115,12 +115,21 @@ It then reaped the two worktree processes (the agent and its launcher), returned
 A listing of the lab home before and after showed that only these records changed: the task's `busy-gen`, `busy-state`, `copilot-home` (with its sessions, logs, and `config.json`), `copilot-plugin`, `git-hooks`, `meta`, and `turn-ended` were removed, and the home's `terminal-outcomes` record was added.
 The task's `data/` directory, the project clone, and the other tmux window were untouched, no worker process survived, and no file under the captain's real `~/.copilot` was modified.
 A second scout was exited, relaunched with `fm-control relaunch --note`, and found with its per-task home preserved (a marker file inside it survived), the worktree still listed under `trustedFolders`, and no trust dialog; it was then torn down the same way.
-Herdr teardown is still unverified, and no Herdr command was run.
+
+## Herdr relaunch and teardown
+
+On 2026-11-07, in a named isolated Herdr lab session (guarded helper for every lifecycle action, default session untouched and still running afterwards) and a scratch Firstmate home with a local-origin project, a Copilot scout was spawned with `fm-spawn.sh --scout --harness copilot --backend herdr`.
+- **Launch:** no trust dialog appeared, the worker answered, wrote its report, and appended `done`; the busy record went from `busy fm-spawn` to `busy copilot-hook` and closed at `agentStop` with the turn-end notification raised once.
+- **Exit and relaunch:** `fm-control exit` returned `stopped` and the pane fell back to its shell with `Resume copilot --resume=<session-id>`.
+  `fm-control relaunch --note` started a replacement agent in the same pane and worktree under a new busy generation, which picked up the note, answered, appended `done`, and closed its record at `agentStop`.
+- **Per-task home:** a marker file placed in the task's Copilot home before the exit survived the relaunch, `trustedFolders` still listed exactly the worktree, and the pane showed no trust dialog.
+- **Teardown:** `fm-teardown.sh` on the live agent returned the worktree, closed the pane, and left no `copilot` process.
+  A before and after listing of the lab home to two levels showed only the task's own records removed (`busy-gen`, `busy-state`, `control-relaunch` with its `brief-prior`, `meta-prior` and `note` records, `copilot-home`, `copilot-plugin`, `git-hooks`, `meta`, `status`, `turn-ended`) and `terminal-outcomes` plus the watcher-stale banner marker added; the project clone, `data/`, and the rest of the home were unchanged, and no file under the captain's real `~/.copilot` changed.
+- The lab helper's teardown stopped and deleted the lab session, and the default session was still running.
 
 ## Still not exercised
 
-Relaunch after an exit and teardown were exercised on tmux only, not on Herdr; Herdr teardown with the per-task home is unverified.
-Secondmate use was not exercised.
+Secondmate use and a host that keeps the Copilot token in `config.json` rather than the OS keyring were not exercised.
 
 ## Reusable guards
 
