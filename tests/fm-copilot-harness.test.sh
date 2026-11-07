@@ -100,6 +100,15 @@ for locale_name in C C.UTF-8; do
   [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$cap/busy-empty.pane")")" = empty ] || fail "real working composer not empty under LC_ALL=$locale_name"
   [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$cap/busy-draft.pane")")" = pending ] || fail "real draft not preserved under LC_ALL=$locale_name"
 done
+# Real captures from a live tmux pane (tests/captures/copilot-1.0.105-tmux): the
+# plain rule-bounded `❯` composer at 200 columns, with a status row above it.
+tcap="$ROOT/tests/captures/copilot-1.0.105-tmux"
+for locale_name in C C.UTF-8; do
+  for pane in idle busy-empty after-interrupt idle-after-relaunch; do
+    [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$tcap/$pane.pane")")" = empty ] || fail "real tmux $pane composer not empty under LC_ALL=$locale_name"
+  done
+  [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$tcap/idle-draft.pane")")" = pending ] || fail "real tmux draft not preserved under LC_ALL=$locale_name"
+done
 # A byte-based awk (mawk, or LC_ALL=C) must still match a normal-width rule.
 export FM_COMPOSER_HARNESS=copilot
 for awk_locale in C C.UTF-8; do
@@ -131,13 +140,23 @@ for event in userPromptSubmitted agentStop sessionEnd; do
     || fail "$event hook missing"
 done
 [ "$(stat -c %a "$plugin" 2>/dev/null || stat -f %Lp "$plugin")" = 700 ] || fail 'plugin dir is not private'
-run_hook() { bash -c "$(jq -r --arg event "$1" '.hooks[$event][0].bash' "$hooks")"; }
+run_hook() { printf '%s' "${2:-}" | bash -c "$(jq -r --arg event "$1" '.hooks[$event][0].bash' "$hooks")"; }
 run_hook userPromptSubmitted
 [ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'busy copilot-hook' ] || fail 'submit did not open busy'
 run_hook agentStop
 [ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'idle copilot-hook' ] || fail 'agentStop did not settle'
 assert_present "$state/worker.turn-ended" 'agentStop notification absent'
 run_hook userPromptSubmitted
+# A subagent's own stop (parentAgentId present) must neither close the parent's turn nor wake the supervisor.
+rm -f "$state/worker.turn-ended"
+sub_payload='{"sessionId":"s1","agentId":"a1","agentType":"task","parentAgentId":"s0","stopReason":"end_turn"}'
+run_hook agentStop "$sub_payload"
+[ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'busy copilot-hook' ] || fail 'subagent stop closed the parent turn'
+assert_absent "$state/worker.turn-ended" 'subagent stop raised a false turn end'
+run_hook agentStop '{"sessionId":"s0","prompt":"mentions \"parentAgentId\":\"x\"","stopReason":"end_turn"}'
+[ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'idle copilot-hook' ] || fail 'prompt text naming parentAgentId blocked the real stop'
+run_hook userPromptSubmitted
+run_hook userPromptSubmitted "$sub_payload"
 run_hook sessionEnd
 [ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'idle copilot-hook' ] || fail 'sessionEnd did not settle'
 "$ROOT/bin/fm-busy-event.sh" arm "$state" worker >/dev/null
@@ -157,7 +176,17 @@ wiring=$(fm_control_harness_wiring_paths copilot /unused "$state" worker)
 case "$wiring" in *"$hooks"*"$plugin/plugin.json"*) ;; *) fail "plugin retirement paths missing: $wiring" ;; esac
 ! "$ROOT/bin/fm-copilot-plugin.sh" "$state" 'bad id' "$gen" 2>/dev/null || fail 'invalid task id accepted'
 jq -e . "$hooks" >/dev/null || fail 'failed write replaced a valid plugin'
-pass "private plugin lifecycle and stale-generation rejection"
+wt_home="$TMP_ROOT/trusted wt"
+mkdir -p "$wt_home"
+"$ROOT/bin/fm-copilot-plugin.sh" "$state" worker "$gen" "$wt_home" || fail 'home seeding failed'
+cop_home="$state/worker.copilot-home"
+[ "$(stat -c %a "$cop_home" 2>/dev/null || stat -f %Lp "$cop_home")" = 700 ] || fail 'copilot home is not private'
+jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.trustedFolders == [$wt]' "$cop_home/config.json" >/dev/null || fail 'seed does not trust only the worktree'
+# Copilot rewrites config.json with a comment header and its own keys; a relaunch must keep them and still trust the worktree.
+printf '// managed\n{"trustedFolders":["/elsewhere"],"firstLaunchAt":"x"}\n' > "$cop_home/config.json"
+"$ROOT/bin/fm-copilot-plugin.sh" "$state" worker "$gen" "$wt_home" || fail 'home reseed failed'
+jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.firstLaunchAt == "x" and .trustedFolders == [$wt]' "$cop_home/config.json" >/dev/null || fail 'reseed lost keys or kept a stale trust entry'
+pass "private plugin, trusted home, lifecycle and stale-generation rejection"
 
 case_dir="$TMP_ROOT/spawn"
 fakebin=$(make_spawn_fakebin "$case_dir/fake" claude)
@@ -172,7 +201,11 @@ if ! out=$(FM_FAKE_LAUNCH_LOG="$case_dir/launch" fm_test_run_spawn "$home" "$wt"
 then fail "spawn failed: $out"; fi
 launch=$(cat "$case_dir/launch")
 assert_contains "$launch" '--allow-all' 'autonomy flag missing'
-assert_contains "$launch" 'COPILOT_ALLOW_ALL=true' 'folder trust switch missing (the dialog would hold the prompt)'
+assert_contains "$launch" "COPILOT_HOME='$home/state/copilot-worker.copilot-home'" 'per-task Copilot home missing'
+case "$launch" in *COPILOT_ALLOW_ALL*) fail 'launch trusts every directory through COPILOT_ALLOW_ALL' ;; esac
+jq -e --arg wt "$(cd "$wt" && pwd -P)" '.trustedFolders == [$wt]' "$home/state/copilot-worker.copilot-home/config.json" >/dev/null \
+  || fail 'per-task home does not trust exactly the worktree'
+assert_contains "$launch" '--no-ask-user' 'ask_user tool not disabled'
 assert_contains "$launch" '--no-auto-update' 'auto-update not disabled'
 assert_contains "$launch" "--plugin-dir '$home/state/copilot-worker.copilot-plugin'" 'private plugin missing'
 assert_contains "$launch" "--model 'claude-sonnet-5.5'" 'model lost'
@@ -195,7 +228,15 @@ if ! out=$(FM_FAKE_LAUNCH_LOG="$case_dir/launch-low" fm_test_run_spawn "$home" "
 then fail "low-effort spawn failed: $out"; fi
 case "$(cat "$case_dir/launch-low")" in *"--model"*) fail 'a model flag appeared with no model requested' ;; esac
 assert_contains "$(cat "$case_dir/launch-low")" "--reasoning-effort 'low'" 'low effort lost'
-pass "scout launch carries autonomy, plugin, typed brief and hooks; secondmate refused"
+# Teardown retires the whole per-task home and plugin directory with the rest of the task records.
+[ -d "$home/state/copilot-worker.copilot-home" ] || fail 'spawn did not create the per-task home'
+mkdir -p "$home/state/copilot-worker.copilot-home/session-state"
+if ! out=$(FM_ROOT_OVERRIDE='' FM_HOME="$home" HOME="$home/user-home" FM_STATE_OVERRIDE="$home/state" FM_DATA_OVERRIDE="$home/data" \
+  FM_PROJECTS_OVERRIDE="$home/projects" FM_CONFIG_OVERRIDE="$home/config" FM_SPAWN_NO_GUARD=1 TMUX='fake,1,0' PATH="$fakebin:$PATH" \
+  "$ROOT/bin/fm-teardown.sh" copilot-worker --force 2>&1); then fail "teardown failed: $out"; fi
+assert_absent "$home/state/copilot-worker.copilot-home" 'teardown left the per-task Copilot home'
+assert_absent "$home/state/copilot-worker.copilot-plugin" 'teardown left the plugin directory'
+pass "scout launch carries autonomy, trusted home, plugin, typed brief and hooks; secondmate refused"
 
 # The composer and interrupt reads are proven only on tmux and Herdr, so every
 # other spawn-capable backend is refused before any endpoint, worktree, or busy
@@ -210,7 +251,7 @@ for backend in zellij cmux orca; do
   if out=$(FM_FAKE_LAUNCH_LOG="$case_dir/copilot-$backend.launch" fm_test_run_spawn "$home" "$wt" "$fakebin" "copilot-$backend" "$proj" \
     --scout --harness copilot --backend "$backend" 2>&1)
   then fail "Copilot launch accepted on backend=$backend"; fi
-  assert_contains "$out" "copilot is enabled only on tmux and herdr; real-pane verification is pending; backend=$backend" "wrong refusal on $backend: $out"
+  assert_contains "$out" "copilot is enabled only on tmux and herdr; backend=$backend has no verified Copilot pane" "wrong refusal on $backend: $out"
   assert_absent "$case_dir/copilot-$backend.launch" "Copilot launched on $backend"
   assert_absent "$home/state/copilot-$backend.meta" "refused $backend spawn left a task record"
   assert_absent "$home/state/copilot-$backend.busy-gen" "refused $backend spawn armed busy state"

@@ -3110,9 +3110,16 @@ launch_template() {
   # --allow-all is the YOLO equivalent of every permission prompt and path/URL
   # check an unattended crewmate would otherwise hit. It does NOT skip the
   # folder-trust dialog of a fresh worktree, which would hold the -i prompt
-  # unsent (verified, copilot 1.0.105); COPILOT_ALLOW_ALL=true is the documented
-  # switch that also trusts the working directory without prompting, at the cost
-  # of loading that worktree's own skills, MCP servers and hooks. --no-auto-update keeps a worker from
+  # unsent (verified, copilot 1.0.105). COPILOT_ALLOW_ALL=true would trust every
+  # directory, and answering the dialog is not unattended (declining exits the
+  # agent), so COPILOT_HOME is relocated onto a firstmate-owned per-task home
+  # whose config.json trusts exactly this worktree (bin/fm-copilot-plugin.sh);
+  # the captain's ~/.copilot stays untouched and login still works because the
+  # credential lives in the OS keyring keyed by account, not in that directory.
+  # Trusting the worktree still loads its own project hooks, skills and MCP
+  # servers; no setting found suppresses that. --no-ask-user removes the ask_user
+  # tool, so an unattended worker decides alone instead of holding on a question
+  # nobody answers (verified, copilot 1.0.105). --no-auto-update keeps a worker from
   # swapping its own binary mid-task. --plugin-dir loads the private per-task
   # plugin (bin/fm-copilot-plugin.sh) carrying the lifecycle hooks, which is the
   # only per-task hook channel: every other hook source is a user or project
@@ -3121,7 +3128,7 @@ launch_template() {
   # whenever that variable is set. Copilot publishes no identity marker of its
   # own, so ancestry decides (its kernel process name is MainThread, argv[0] is
   # copilot).
-  copilot) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI COPILOT_ALLOW_ALL=true __COPILOTBIN__ --allow-all --no-auto-update --plugin-dir __COPILOTPLUGIN__ __MODELFLAG____EFFORTFLAG__-i "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
+  copilot) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI COPILOT_HOME=__COPILOTHOME__ __COPILOTBIN__ --allow-all --no-ask-user --no-auto-update --plugin-dir __COPILOTPLUGIN__ __MODELFLAG____EFFORTFLAG__-i "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Hermes's native interactive query starts a visible TUI, never one-shot.
   hermes) printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u FM_OMP_HARNESS -u ATLASSIAN_AGENT_TYPE -u ROVODEV_CLI FM_HERMES_HARNESS=hermes HERMES_HOME=__HERMESHOME__ HERMES_MANAGED_DIR=__HERMESHOOKS__ __HERMESBIN__ __HERMESPROFILE__chat --tui --yolo --accept-hooks -q "$(__OPINPUT__ encode launch-brief < __BRIEF__)"' ;;
   # Kimi Code rejects a positional prompt, so it launches bare and receives
@@ -3281,12 +3288,11 @@ fi
 
 # Copilot's composer shape is read from the recorded harness name and its
 # interrupt arming needs a visible-screen read between presses. Both rest on
-# backend-neutral code that tmux and Herdr share; no real Copilot pane has run
-# on either yet (docs/verification/copilot.md says exactly what was exercised),
-# so every other spawn-capable backend is refused before any endpoint or record
-# exists.
+# backend-neutral code that tmux and Herdr share; a real Copilot pane has run on
+# each (docs/verification/copilot.md says exactly what was exercised), so every
+# other spawn-capable backend is refused before any endpoint or record exists.
 if [ "$HARNESS" = copilot ] && [ "$BACKEND" != tmux ] && [ "$BACKEND" != herdr ]; then
-  echo "error: copilot is enabled only on tmux and herdr; real-pane verification is pending; backend=$BACKEND is unproven for its composer and interrupt reads. Select backend tmux or herdr." >&2
+  echo "error: copilot is enabled only on tmux and herdr; backend=$BACKEND has no verified Copilot pane for its composer and interrupt reads. Select backend tmux or herdr." >&2
   exit 1
 fi
 
@@ -6556,7 +6562,7 @@ BUSY_GEN=
     ;;
   copilot)
     if [ "$RAW_LAUNCH" -eq 0 ]; then
-      "$SCRIPT_DIR/fm-copilot-plugin.sh" "$STATE_REAL" "$ID" "$BUSY_GEN" || exit 1
+      "$SCRIPT_DIR/fm-copilot-plugin.sh" "$STATE_REAL" "$ID" "$BUSY_GEN" "$WT" || exit 1
     fi
     ;;
   gemini)
@@ -7551,6 +7557,7 @@ cortex)
 copilot)
   LAUNCH=${LAUNCH//__COPILOTBIN__/"$(shell_quote "$COPILOT_BIN")"}
   LAUNCH=${LAUNCH//__COPILOTPLUGIN__/"$(shell_quote "$STATE_REAL/$ID.copilot-plugin")"}
+  LAUNCH=${LAUNCH//__COPILOTHOME__/"$(shell_quote "$STATE_REAL/$ID.copilot-home")"}
   ;;
 agy) LAUNCH=${LAUNCH//__AGYBIN__/"$(shell_quote "$AGY_BIN")"} ;;
 opencode)
