@@ -13,6 +13,15 @@ With `--no-ask-user` the model reported that no question tool was available, dec
 `copilot --help` lists the flag as `--no-ask-user` (disable the `ask_user` tool; the agent works autonomously without asking questions).
 The shipped launch passes it, and the ordinary shell tool and status-line appends are unaffected.
 
+## Subagent turns
+
+On 2026-11-07, in a real tmux 3.7c pane with Copilot 1.0.105, a worker was told to use its `task` tool to have a subagent run `sleep 20; echo hi`.
+The hooks fired in this order: the parent's `userPromptSubmitted`, `preToolUse` for `task`, `subagentStart`, then a second `userPromptSubmitted` and later a second `agentStop` for the subagent, then `subagentStop`, `postToolUse` for `task`, and finally the parent's own `agentStop`.
+Subagent payloads carry `agentId`, `agentType`, and `parentAgentId`, and their `sessionId` is the subagent's own; the parent's payloads carry none of those three keys.
+The subagent's `agentStop` arrived about 1.5 s before the parent's, so before the fix it closed the parent's busy record and raised the turn-end notification while the parent was still working (the record's sequence counter reached 5 for one parent turn, against 3 after the fix).
+The plugin hooks now skip `userPromptSubmitted` and `agentStop` payloads that contain `"parentAgentId":"`, and a repeat run of the same task kept the record `busy copilot-hook` until the parent's `agentStop`, with the turn-end notification raised once at the end.
+`subagentStart`, `subagentStop`, and `sessionEnd` are not wired; `sessionEnd` was seen only at exit.
+
 ## Real Herdr pane trial
 
 On 2026-11-05 a supervised Copilot 1.0.105 ship worker ran in a real Herdr pane: the `fm-spawn.sh` launch, brief pickup, status reports, and the busy and idle hook records all worked.
@@ -111,7 +120,7 @@ Herdr teardown is still unverified, and no Herdr command was run.
 ## Still not exercised
 
 Relaunch after an exit and teardown were exercised on tmux only, not on Herdr; Herdr teardown with the per-task home is unverified.
-Subagent turns and secondmate use were not exercised.
+Secondmate use was not exercised.
 
 ## Reusable guards
 

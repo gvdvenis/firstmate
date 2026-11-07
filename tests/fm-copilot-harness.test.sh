@@ -140,13 +140,23 @@ for event in userPromptSubmitted agentStop sessionEnd; do
     || fail "$event hook missing"
 done
 [ "$(stat -c %a "$plugin" 2>/dev/null || stat -f %Lp "$plugin")" = 700 ] || fail 'plugin dir is not private'
-run_hook() { bash -c "$(jq -r --arg event "$1" '.hooks[$event][0].bash' "$hooks")"; }
+run_hook() { printf '%s' "${2:-}" | bash -c "$(jq -r --arg event "$1" '.hooks[$event][0].bash' "$hooks")"; }
 run_hook userPromptSubmitted
 [ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'busy copilot-hook' ] || fail 'submit did not open busy'
 run_hook agentStop
 [ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'idle copilot-hook' ] || fail 'agentStop did not settle'
 assert_present "$state/worker.turn-ended" 'agentStop notification absent'
 run_hook userPromptSubmitted
+# A subagent's own stop (parentAgentId present) must neither close the parent's turn nor wake the supervisor.
+rm -f "$state/worker.turn-ended"
+sub_payload='{"sessionId":"s1","agentId":"a1","agentType":"task","parentAgentId":"s0","stopReason":"end_turn"}'
+run_hook agentStop "$sub_payload"
+[ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'busy copilot-hook' ] || fail 'subagent stop closed the parent turn'
+assert_absent "$state/worker.turn-ended" 'subagent stop raised a false turn end'
+run_hook agentStop '{"sessionId":"s0","prompt":"mentions \"parentAgentId\":\"x\"","stopReason":"end_turn"}'
+[ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'idle copilot-hook' ] || fail 'prompt text naming parentAgentId blocked the real stop'
+run_hook userPromptSubmitted
+run_hook userPromptSubmitted "$sub_payload"
 run_hook sessionEnd
 [ "$(fm_busy_classify tmux fake:w copilot worker "$state")" = 'idle copilot-hook' ] || fail 'sessionEnd did not settle'
 "$ROOT/bin/fm-busy-event.sh" arm "$state" worker >/dev/null
