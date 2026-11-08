@@ -14,6 +14,13 @@
         "bash": "\"$COPILOT_PROJECT_DIR\"/bin/fm-pretool-copilot.sh",
         "timeoutSec": 10
       }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "bash": "\"$COPILOT_PROJECT_DIR\"/bin/fm-turnend-guard-copilot.sh",
+        "timeoutSec": 30
+      }
     ]
   }
 }
