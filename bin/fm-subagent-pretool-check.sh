@@ -143,6 +143,11 @@ if [ "$TOOL_SET" -eq 0 ]; then
   PAYLOAD=$(cat 2>/dev/null || true)
   [ -n "$PAYLOAD" ] || exit 0
   command -v jq >/dev/null 2>&1 || exit 0
+  # Copilot loads the tracked Claude settings too and runs this entry on its own
+  # tools; it is not a Firstmate primary (docs/verification/copilot.md).
+  # shellcheck source=bin/fm-hook-host-lib.sh
+  . "$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/fm-hook-host-lib.sh"
+  fm_hook_payload_is_copilot "$PAYLOAD" && exit 0
   TOOL=$(printf '%s' "$PAYLOAD" | jq -r '(.toolCall.name // .tool_name // .toolName // empty)' 2>/dev/null) || exit 0
 fi
 
