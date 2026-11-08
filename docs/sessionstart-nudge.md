@@ -26,7 +26,7 @@ The tier is a property of the harness surface, not of the home.
 
 | Tier | What the adapter does | Used by |
 | --- | --- | --- |
-| Run | Executes `bin/fm-session-start.sh` through the native session-open adapter and gates its ordered digest into model context before the first turn. | Claude, `codex exec`, verified native Codex TUI, Pi / pi-signed, omp, Cursor, Antigravity (agy) |
+| Run | Executes `bin/fm-session-start.sh` through the native session-open adapter and gates its ordered digest into model context before the first turn. | Claude, `codex exec`, verified native Codex TUI, Pi / pi-signed, omp, Cursor, Antigravity (agy), GitHub Copilot CLI |
 | Nudge | Asks the agent to run the digest through the native adapter or the tracked session-start instruction. | Grok, OpenCode, and run-tier sources routed to the nudge |
 
 Codex's interactive TUI has verified session-open delivery only on the native version selected by `bin/fm-codex-stop-park.sh`; its compaction and re-emit surfaces remain unverified.
@@ -44,7 +44,9 @@ Codex's interactive TUI has verified session-open delivery only on the native ve
 | Cursor | Run | [Cursor](#cursor) |
 | omp | Run | [omp](#omp) |
 | Antigravity (agy) | Run | [Antigravity (agy)](#antigravity-agy) |
+| GitHub Copilot CLI | Run | [GitHub Copilot CLI](#github-copilot-cli) |
 | Cursor compaction | Uncovered | [Cursor compaction](#cursor-compaction) |
+| Copilot compaction | Uncovered | [Copilot compaction](#copilot-compaction) |
 
 ### Why the run tier exists
 
@@ -380,6 +382,32 @@ In linked crewmate worktrees or foreign checkouts, `bin/fm-sessionstart-run.sh` 
 In primary or secondmate homes, the wrapper emits the captured digest as `{injectSteps:[{systemMessage:{systemMessage:$digest}}]}` on stdout with exit 0.
 Native stdout context injection gates the ordered digest into model context before the first agent turn.
 
+### GitHub Copilot CLI
+
+GitHub Copilot CLI is a run-tier harness for a hand-opened primary session.
+`.github/hooks/firstmate-primary.json` registers `sessionStart`, anchored through `$COPILOT_PROJECT_DIR` with a 180s timeout, invoking `bin/fm-sessionstart-copilot.sh`.
+Copilot loads project hooks only for a trusted folder.
+The adapter reads `source` from the native payload and delegates to `bin/fm-sessionstart-run.sh`, which owns primary scope, source routing, and the digest.
+It returns the digest as `{"additionalContext":...}`, which reaches the model before its first reply, and prints nothing when the run wrapper stands down.
+The hook fires when the first prompt is submitted, not when the pane opens.
+
+| Copilot event | Payload `source` | Action |
+| --- | --- | --- |
+| First prompt of a new session | `new` | Full digest |
+| First prompt after `--continue` | `resume` | Nudge wrapper |
+| First prompt after `/clear` | `new` | Full digest |
+
+`/clear` ends the old session (`sessionEnd`) and starts a new one, so it is indistinguishable from a fresh launch and takes the redundant full digest rather than a re-emit.
+The payload type also lists `startup`, which a real session was not seen to send; it routes as `startup`.
+The turn-end guard and wake delivery for a Copilot primary are not part of this registration.
+
+### Copilot compaction
+
+Copilot compaction is uncovered and has no tracked transport.
+`/compact` fires only `preCompact` and no `sessionStart` afterwards.
+Whether `preCompact` output can inject context was not verified, so Firstmate registers nothing for it.
+A compacted Copilot session keeps whatever context survived rather than receiving a fresh digest.
+
 ### Cursor compaction
 
 Cursor compaction is uncovered and has no tracked transport.
@@ -458,6 +486,13 @@ It uses a TERM-resistant digest that exceeds its budget and proves that the dige
 - It keeps `preCompact` unregistered, so the deferred surface cannot be reintroduced unnoticed.
 
 `FM_CURSOR_PRIMARY_LIVE_E2E=1 tests/fm-cursor-primary-live-e2e.test.sh` proves the injected digest actually reaches model context in a real cursor-agent session.
+
+### Copilot tests
+
+`tests/fm-copilot-primary.test.sh` proves the Copilot adapters over sanitized recorded payloads and the tracked registration's own command strings:
+
+- `sessionStart` emits the whole digest as `additionalContext` for `new`, nudges for `resume`, and takes the helm for an unrecognized source or an unreadable payload.
+- A linked worker worktree carrying the same registration gets no digest.
 
 ### Live run-tier guards
 

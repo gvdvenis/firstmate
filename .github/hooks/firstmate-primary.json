@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "\"$COPILOT_PROJECT_DIR\"/bin/fm-sessionstart-copilot.sh",
+        "timeoutSec": 180
+      }
+    ]
+  }
+}
