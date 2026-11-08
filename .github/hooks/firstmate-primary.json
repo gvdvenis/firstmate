@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "\"$COPILOT_PROJECT_DIR\"/bin/fm-sessionstart-copilot.sh",
+        "timeoutSec": 180
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "\"$COPILOT_PROJECT_DIR\"/bin/fm-pretool-copilot.sh",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}
