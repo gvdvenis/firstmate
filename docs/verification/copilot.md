@@ -97,7 +97,7 @@ Firstmate's own skills are read by path from the brief, so a worker does not dep
 ## Hook decision facts
 
 On 2026-11-06, with a plugin hook file and a relocated `COPILOT_HOME` in a real tmux pane, these hook results were observed.
-They bear on a Copilot primary, which remains unsupported.
+They bear on a Copilot primary, whose session-start and pre-tool hooks are verified under Native primary hooks and whose turn-end guard and wake delivery are not built.
 
 - `preToolUse` printing `{"permissionDecision":"deny","permissionDecisionReason":"..."}` stopped a shell command from running under `--allow-all`, and the pane showed `Denied by preToolUse hook: <reason>`.
 - `preToolUse` exiting 2 also denied, with the generic reason `hook exited with code 2`; its stderr was not shown.
@@ -134,6 +134,51 @@ Stop              session_id, transcript_path, cwd, prompt_id, permission_mode, 
 - `bin/fm-hook-host-lib.sh` requires the `timestamp` string and the absence of `permission_mode`, `prompt_id`, and `tool_use_id`, none of which Copilot sends, so a Claude release that adds `timestamp` does not stand Claude down.
 - A payload that is not an object, has no `timestamp`, or cannot be parsed runs the entry.
 - `bash tests/fm-copilot-claude-standdown.test.sh` pins the sanitized shapes against each affected entrypoint.
+
+## Native primary hooks
+
+On 2026-11-08, Copilot 1.0.105 ran in real tmux 3.7c panes and `-p` runs with a relocated `COPILOT_HOME` that trusted only a scratch project, to verify the tracked registration `.github/hooks/firstmate-primary.json`.
+The registration holds one `sessionStart` entry running `bin/fm-sessionstart-copilot.sh` and one `preToolUse` entry running `bin/fm-pretool-copilot.sh`, both anchored through `$COPILOT_PROJECT_DIR`.
+
+### Hook sources and environment
+
+- A project hook file in `.github/hooks/*.json` loaded once the folder was trusted, with `{"version":1,"hooks":{"<event>":[{"type":"command","bash":"...","timeoutSec":N}]}}`.
+- Run with the shell in a subdirectory of the project, the hook still ran with its working directory and `COPILOT_PROJECT_DIR` both set to the project root.
+- A worker's trusted worktree loads the same project hooks, so a launch built like `fm-spawn.sh`'s (per-task `COPILOT_HOME`, `--plugin-dir` worker plugin, linked worktree carrying the registration) invoked both adapters; they stood down by primary scope, the digest was absent from the model's context, `cd projects/foo` ran, and the `task` tool ran a subagent.
+- That worker launch reproduced `fm-spawn.sh`'s launch template and `bin/fm-copilot-plugin.sh` by hand in a scratch directory; it was not started by `fm-spawn.sh` itself.
+- The plugin `bin/fm-copilot-plugin.sh` writes registers only `userPromptSubmitted`, `agentStop`, and `sessionEnd`, so a worker plugin never carries either primary hook.
+- A project registration is therefore the only tracked channel that reaches a hand-opened session in a checkout, and it also reaches a worker on a Firstmate worktree, which is why both adapters stand down outside a primary home.
+
+### sessionStart
+
+- The native payload is `sessionId`, `timestamp` (epoch milliseconds, an integer), `cwd`, `source`, and `initialPrompt`.
+- The hook fires when the first prompt is submitted, not when the pane opens.
+- `source` was `new` for a fresh launch, `new` again after `/clear`, and `resume` (with the earlier session's id) for `copilot --continue`.
+- `/clear` first fires `sessionEnd` with `reason: user_exit` for the old session, then a `sessionStart` with a new session id at the next prompt.
+- The SDK type also lists `startup`; no real run sent it.
+- `--resume <id>` was not exercised.
+- `/compact` fired `preCompact` (`trigger: manual`, `customInstructions`, `transcriptPath`) and no `sessionStart` afterwards.
+- Whether `preCompact` output can put text in front of the model was not tried, so compaction delivery is unverified and unregistered.
+- In a hand-opened session in a scratch primary checkout, a 12790-character digest returned as `additionalContext` reached the model: it quoted the digest's first and last lines.
+- Subagent sessions raised no `sessionStart`.
+
+### preToolUse
+
+- A `preToolUse` for the subagent tool carries `toolName` `task` and `toolArgs` of `description`, `prompt`, `agent_type`, `name`, and `mode`, and precedes the `subagentStart` hook.
+- That is the subagent-spawn point, so the subagent guard needs no separate native hook.
+- The hook configuration schema in the SDK types has no matcher field, and a matcher was not tried, so `bin/fm-pretool-copilot.sh` receives every tool call and filters on its own.
+- A subagent's own tool calls raise `preToolUse` too, with `agentId`, `agentType`, and `parentAgentId` in the payload.
+- The model's tool names in one session were `bash`, `read_bash`, `stop_bash`, `list_bash`, `view`, `web_fetch`, `skill`, `sql`, `read_agent`, `list_agents`, `write_agent`, `rg`, `glob`, `task`, `apply_patch`, `search_code_subagent`, `run_dynamic_workflow`, and `dynamic_workflows_manage`, plus the connected MCP server's `github-mcp-server-*` tools.
+- `search_code_subagent`, `run_dynamic_workflow`, `dynamic_workflows_manage`, and `write_agent` match the subagent guard's delegation stems and are denied in a primary; `read_agent` and `list_agents` are on its observe-only list.
+- In a hand-opened session in a scratch primary checkout, `cd projects/foo` and the `task` tool were both denied through `{"permissionDecision":"deny","permissionDecisionReason":"..."}` with exit 0, and the pane showed `Denied by preToolUse hook:` followed by the full reason, which the model then quoted back exactly.
+
+### Reusable guard
+
+```bash
+bash bin/fm-test-run.sh tests/fm-copilot-primary.test.sh
+```
+
+The portable suite pins sanitized payloads, the registration's own command strings, the worker worktree stand-down, and the worker plugin's missing primary hooks, with no Copilot install.
 
 ## Teardown of a live worker
 
