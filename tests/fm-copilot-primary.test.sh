@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Portable regression for GitHub Copilot CLI's native primary hooks:
 # bin/fm-sessionstart-copilot.sh (sessionStart), bin/fm-pretool-copilot.sh
-# (preToolUse), and their tracked registration .github/hooks/firstmate-primary.json
+# (preToolUse), bin/fm-turnend-guard-copilot.sh (agentStop), and their tracked
+# registration .github/hooks/firstmate-primary.json
 # (docs/sessionstart-nudge.md "GitHub Copilot CLI", docs/verification/copilot.md).
 # Payloads are sanitized recordings of copilot 1.0.105; no Copilot install is
 # needed. tests/fm-copilot-harness.test.sh owns the worker launch itself.
@@ -26,12 +27,16 @@ session_payload() {  # <source>
 tool_payload() {  # <tool> <json toolArgs> [extra json members, leading comma]
   printf '{"sessionId":"%s","timestamp":%s,"cwd":"/work/p","toolName":"%s","toolArgs":%s%s}' "$SID" "$TS" "$1" "$2" "${3:-}"
 }
+stop_payload() {  # [extra json members, leading comma]
+  printf '{"sessionId":"%s","timestamp":%s,"cwd":"/work/p","stop_reason":"end_turn"%s}' "$SID" "$TS" "${1:-}"
+}
 SUB_MEMBERS=',"agentId":"a1","agentType":"task","parentAgentId":"00000000-0000-4000-8000-000000000001"'
 
 install_scripts() {  # <dir>
   local dir=$1 f
   mkdir -p "$dir/bin" "$dir/docs" "$dir/.github/hooks"
-  for f in fm-sessionstart-copilot.sh fm-pretool-copilot.sh fm-sessionstart-run.sh \
+  for f in fm-sessionstart-copilot.sh fm-pretool-copilot.sh fm-turnend-guard-copilot.sh \
+           fm-turnend-guard.sh fm-copilot-wake.sh fm-sessionstart-run.sh \
            fm-sessionstart-nudge.sh fm-arm-pretool-check.sh fm-cd-pretool-check.sh \
            fm-subagent-pretool-check.sh fm-hook-host-lib.sh fm-primary-scope-lib.sh \
            fm-path-lib.sh fm-session-lock-lib.sh fm-operational-input.sh fm-harness.sh \
@@ -47,6 +52,7 @@ install_scripts() {  # <dir>
   cat > "$dir/bin/fm-session-start.sh" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FM_HOME/state/digest-args"
+printf '%s\n' "${FM_COPILOT_HARNESS:-}" > "$FM_HOME/state/digest-harness"
 printf 'FIRSTMATE DIGEST "quoted" line\nsecond line\n'
 SH
   chmod +x "$dir/bin/fm-session-start.sh"
@@ -94,6 +100,7 @@ test_sessionstart_emits_additional_context_for_a_new_session() {
   case "$ctx" in *'FIRSTMATE DIGEST "quoted" line'*) ;; *) fail "the digest must reach model context verbatim, got: $out" ;; esac
   case "$ctx" in *'second line'*) ;; *) fail "the digest was truncated at the first line: $ctx" ;; esac
   printf '%s' "$out" | jq -e 'keys == ["additionalContext"]' >/dev/null || fail "the output must be exactly one additionalContext object: $out"
+  [ "$(cat "$dir/state/digest-harness")" = copilot ] || fail "the digest must be told its harness, because its process chain is past the ancestry walk's bound"
   pass "fm-sessionstart-copilot: a new session gets the whole digest as additionalContext"
 }
 
@@ -208,17 +215,82 @@ test_pretool_inert_in_a_worker_worktree() {
   pass "fm-pretool-copilot: every check stands down in a linked worker worktree"
 }
 
+# --- turn-end guard --------------------------------------------------------------
+
+test_turnend_blocks_once_when_work_is_unsupervised() {
+  local dir out status reason
+  dir=$(make_primary_dir "$TMP_ROOT/stop-block")
+  : > "$dir/state/task1.meta"
+  out=$(run_registered "$dir" agentStop "$(stop_payload)"); status=$?
+  expect_code 0 "$status" "a block must exit 0, because exit 2 does not continue the turn in Copilot"
+  printf '%s' "$out" | jq -e '.decision == "block" and (keys | length == 2)' >/dev/null 2>&1 \
+    || fail "expected exactly one Copilot block object, got: $out"
+  reason=$(printf '%s' "$out" | jq -r '.reason')
+  case "$reason" in *'TURN WOULD END BLIND'*) ;; *) fail "the reason must carry the shared guard's banner: $reason" ;; esac
+  [ "$(printf '%s' "$reason" | "$ROOT/bin/fm-operational-input.sh" kind)" = turn-end-guard ] \
+    || fail "the reason must be a typed turn-end-guard input, so it never reads as the captain: $reason"
+  out=$(run_registered "$dir" agentStop "$(stop_payload ',"stop_hook_active":true')")
+  [ -z "$out" ] || fail "the stop after a block must end the turn, got: $out"
+  pass "fm-turnend-guard-copilot: blocks an unsupervised stop once, and allows the stop that follows"
+}
+
+test_turnend_allows_when_no_supervision_is_needed() {
+  local dir out
+  dir=$(make_primary_dir "$TMP_ROOT/stop-idle")
+  out=$(run_registered "$dir" agentStop "$(stop_payload)")
+  [ -z "$out" ] || fail "an empty fleet must end the turn silently, got: $out"
+  pass "fm-turnend-guard-copilot: an empty fleet ends the turn silently"
+}
+
+test_turnend_skips_subagent_payloads_and_bad_input() {
+  local dir out p
+  dir=$(make_primary_dir "$TMP_ROOT/stop-skip")
+  : > "$dir/state/task1.meta"
+  out=$(run_registered "$dir" agentStop "$(stop_payload "$SUB_MEMBERS")")
+  [ -z "$out" ] || fail "a subagent's own stop must not be blocked: $out"
+  for p in '' 'not json' '[]' '{"stop_hook_active":"yes"}'; do
+    out=$(run_registered "$dir" agentStop "$p")
+    [ -z "$out" ] || fail "malformed input must allow, got: $p -> $out"
+  done
+  pass "fm-turnend-guard-copilot: subagent-raised and malformed payloads are allowed"
+}
+
+test_turnend_inert_in_a_worker_worktree() {
+  local base child out
+  base=$(make_primary_dir "$TMP_ROOT/stop-base")
+  child="$TMP_ROOT/stop-worker"
+  make_worker_dir "$base" "$child"
+  : > "$child/state/task1.meta"
+  out=$(run_registered "$child" agentStop "$(stop_payload)")
+  [ -z "$out" ] || fail "the guard fired in a worker worktree: $out"
+  pass "fm-turnend-guard-copilot: stands down in a linked worker worktree"
+}
+
+# --- session lock ----------------------------------------------------------------
+
+test_session_lock_recognizes_copilot() {
+  (
+    # shellcheck source=bin/fm-session-lock-lib.sh
+    . "$ROOT/bin/fm-session-lock-lib.sh"
+    fm_harness_process_matches MainThread 'copilot --allow-all' || fail "the Linux shape, comm MainThread and argv[0] copilot, must identify the session"
+    fm_harness_process_matches /home/u/.local/bin/copilot 'copilot --allow-all' || fail "an installed Copilot path must identify the session"
+    ! fm_harness_process_matches MainThread 'copilot-language-server --stdio' || fail "copilot-language-server must not identify a session"
+    ! fm_harness_process_matches MainThread 'node server.js' || fail "an unrelated MainThread process must not identify a session"
+  ) || exit 1
+  pass "session lock: argv[0] copilot identifies a Copilot primary"
+}
+
 # --- registration ----------------------------------------------------------------
 
 test_registration_covers_the_primary_events() {
   [ -f "$REGISTRATION" ] || fail "firstmate must ship a tracked project-scope .github/hooks/firstmate-primary.json"
-  jq -e '.version == 1 and (.hooks | keys == ["preToolUse","sessionStart"])' "$REGISTRATION" >/dev/null 2>&1 \
-    || fail "the registration must cover exactly sessionStart and preToolUse"
+  jq -e '.version == 1 and (.hooks | keys == ["agentStop","preToolUse","sessionEnd","sessionStart","userPromptSubmitted"])' "$REGISTRATION" >/dev/null 2>&1 \
+    || fail "the registration must cover exactly the session, tool, and turn boundary events"
   jq -e '.hooks.sessionStart[0].timeoutSec > 120' "$REGISTRATION" >/dev/null 2>&1 \
     || fail "the session-open timeout must sit above bin/fm-session-start.sh's own 120s budget"
   jq -e '[.hooks[][]] | all(.type == "command" and (.bash | startswith("\"$COPILOT_PROJECT_DIR\"/bin/")))' "$REGISTRATION" >/dev/null 2>&1 \
     || fail "every entry must anchor to COPILOT_PROJECT_DIR"
-  pass "copilot registration: sessionStart and preToolUse, anchored to the project, session timeout above the digest budget"
+  pass "copilot registration: session, tool, and turn events, anchored to the project, session timeout above the digest budget"
 }
 
 test_worker_plugin_does_not_carry_the_primary_hooks() {
@@ -229,7 +301,7 @@ test_worker_plugin_does_not_carry_the_primary_hooks() {
     || fail "fm-copilot-plugin.sh did not write the worker plugin"
   out=$(cat "$state/task1.copilot-plugin/hooks/hooks.json")
   [ -n "$out" ] || fail "the worker plugin has no hooks file"
-  case "$out" in *fm-sessionstart-copilot*|*fm-pretool-copilot*) fail "the worker plugin carries a primary hook: $out" ;; esac
+  case "$out" in *fm-sessionstart-copilot*|*fm-pretool-copilot*|*fm-turnend-guard-copilot*|*fm-copilot-wake*) fail "the worker plugin carries a primary hook: $out" ;; esac
   printf '%s' "$out" | jq -e '.hooks | (has("sessionStart") | not) and (has("preToolUse") | not)' >/dev/null 2>&1 \
     || fail "the worker plugin must not register sessionStart or preToolUse: $out"
   pass "copilot worker plugin: carries no sessionStart or preToolUse hook"
@@ -245,5 +317,10 @@ test_pretool_allows_ordinary_calls
 test_pretool_skips_subagent_payloads_and_bad_input
 test_pretool_honors_the_subagent_escape_hatch
 test_pretool_inert_in_a_worker_worktree
+test_turnend_blocks_once_when_work_is_unsupervised
+test_turnend_allows_when_no_supervision_is_needed
+test_turnend_skips_subagent_payloads_and_bad_input
+test_turnend_inert_in_a_worker_worktree
+test_session_lock_recognizes_copilot
 test_registration_covers_the_primary_events
 test_worker_plugin_does_not_carry_the_primary_hooks

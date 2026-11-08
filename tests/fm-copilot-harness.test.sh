@@ -41,6 +41,9 @@ out=$(PATH="$TMP_ROOT/stopps:$PATH" bash -c 'exec -a copilot-language-server bas
 # shellcheck disable=SC2016
 out=$(PATH="$TMP_ROOT/stopps:$PATH" bash -c 'exec -a editor bash -c '"'"'"$1" ancestry "$$"; :'"'"' _ "$1" copilot' _ "$HARNESS")
 [ "$out" != 'comm copilot' ] || fail "a later argument named copilot claimed the adapter"
+# shellcheck disable=SC2016
+out=$(PATH="$TMP_ROOT/stopps:$PATH" FM_COPILOT_HARNESS=copilot bash -c '"$1"' _ "$HARNESS")
+[ "$out" = copilot ] || fail "the digest's marker must name Copilot when ancestry cannot reach it: $out"
 [ "$(fm_agent_process_classify MainThread copilot 'copilot --no-auto-update')" = agent ] || fail "liveness lost Copilot"
 [ "$(fm_agent_process_classify MainThread /home/u/.local/bin/copilot 'copilot')" = agent ] || fail "liveness lost an installed Copilot"
 # tmux's foreground reading passes an empty path with only argv[0].

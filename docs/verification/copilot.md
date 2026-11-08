@@ -97,7 +97,7 @@ Firstmate's own skills are read by path from the brief, so a worker does not dep
 ## Hook decision facts
 
 On 2026-11-06, with a plugin hook file and a relocated `COPILOT_HOME` in a real tmux pane, these hook results were observed.
-They bear on a Copilot primary, whose session-start and pre-tool hooks are verified under Native primary hooks and whose turn-end guard and wake delivery are not built.
+They bear on a Copilot primary, whose hooks are verified under Native primary hooks and Typed wake.
 
 - `preToolUse` printing `{"permissionDecision":"deny","permissionDecisionReason":"..."}` stopped a shell command from running under `--allow-all`, and the pane showed `Denied by preToolUse hook: <reason>`.
 - `preToolUse` exiting 2 also denied, with the generic reason `hook exited with code 2`; its stderr was not shown.
@@ -179,6 +179,46 @@ bash bin/fm-test-run.sh tests/fm-copilot-primary.test.sh
 ```
 
 The portable suite pins sanitized payloads, the registration's own command strings, the worker worktree stand-down, and the worker plugin's missing primary hooks, with no Copilot install.
+
+## Parked hooks
+
+On 2026-11-08, Copilot 1.0.105 in a real tmux 3.7c pane with a relocated `COPILOT_HOME` ran an `agentStop` hook that waited for an event file.
+A prompt typed during the wait showed `[pending · ↑ recall]`, and `userPromptSubmitted` did not fire until the hook returned.
+Double Escape did nothing, Ctrl-C left the status on `Cancelling`, and `/exit` queued until the hook returned.
+The runtime ended a run after 8 consecutive `decision: block` results, and the ninth reason was dropped with only a log line.
+The next typed prompt reset that count.
+A hook that outran `timeoutSec` was sent SIGTERM and the turn ended idle.
+The pane reads `Working` for the whole wait, so firstmate does not park a Copilot turn boundary.
+
+## Typed wake
+
+On 2026-11-08, Copilot 1.0.105 (model `claude-haiku-4.5`) ran in a real tmux 3.7c pane on a private socket, in a plain clone of this repository carrying the tracked registration, with a relocated `COPILOT_HOME` that trusted only that clone.
+The first prompt asked the model to run `bin/fm-copilot-wake.sh start`, and scripted status lines drove a real `bin/fm-watch.sh`.
+
+| Scenario | Observed |
+| --- | --- |
+| Idle pane, new status line | Queue row in 4 s, doorbell typed 2 s later, the model read the record and ran `bin/fm-wake-drain.sh` and its `--ack-through`, queue empty 5 s after the ring |
+| `zzdraft words` left in the composer | No ring for 15 s with a row queued, draft unchanged, doorbell typed 2 s after the draft was cleared, then acknowledged |
+| Running turn (`sleep 40`) | No ring for 12 s with a row queued and the turn busy, doorbell typed 2 s after `agentStop`, then acknowledged |
+| Double Escape on a running turn | The record stayed `state=busy`, the footer no longer showed `Working`, and the doorbell was typed once the record passed the 25 s grace configured for the run, then acknowledged |
+| Wake process and watcher stopped, then a prompt | `agentStop` returned one block, the reason arrived as a `FIRSTMATE_OP: v1 turn-end-guard:` message, the model ran `bin/fm-copilot-wake.sh start`, and the following stop carried `stop_hook_active: true` and ended the turn |
+| `/exit` with the pane kept open by a shell | The wake process logged `stopped: the pane agent is gone` within 7 s |
+
+- A busy pane draws `Working · <n> B esc esc interrupt` in its footer row, and an idle or interrupted pane does not.
+- A process started from a model `bash` tool call in its own process group outlived the call and the turn.
+- `$TMUX_PANE` reached that process, so `bin/fm-supervisor-target-lib.sh` named the session's own pane.
+- A tmux pane's foreground list carried argv[0] `copilot` during turns and shell tools, so a list without it means the agent exited.
+- A plain clone's `bin/fm-lock.sh` recorded the Copilot pid in `state/.lock` once `copilot` joined the session-lock vocabulary; without it the digest reported a read-only session.
+- A real session-start digest printed `primary harness: copilot`, `Lock: held by this session`, and the `Mode: GitHub Copilot CLI typed wake` protocol, after `bin/fm-sessionstart-copilot.sh` named the harness; without that the digest's process chain passed the eight levels `bin/fm-harness.sh` climbs and it reported `unknown`.
+- The doorbell is the ASCII record-backed form from `bin/fm-operational-input.sh`, so whether Copilot keeps U+2063 in a typed prompt was not measured.
+- A keystroke landing between the composer check and the typed line was not exercised; terminal input has no compare-and-type.
+- The wake was not run in a Herdr pane, and `bin/fm-copilot-wake.sh start` refuses every backend but tmux.
+
+```bash
+bash bin/fm-test-run.sh tests/fm-copilot-wake.test.sh tests/fm-copilot-primary.test.sh
+```
+
+The portable suites pin the wait, re-ring, draft, picker, swallowed-Enter, interrupted-turn, and stand-down paths with a real tmux pane and no Copilot install.
 
 ## Teardown of a live worker
 

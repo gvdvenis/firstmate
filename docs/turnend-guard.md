@@ -263,6 +263,7 @@ Each enabled primary harness adapts its own turn-end mechanism to the shared gua
 | omp | `session_stop` in `.omp/extensions/fm-primary-turnend-guard.ts` | Blocking hook that compels one continuation |
 | Cursor | `stop` hook in `.cursor/hooks.json` | Cannot block, so it parks and returns at most one follow-up |
 | Grok | `Stop` hook in `.grok/hooks/fm-primary-turnend-guard.json` | Native blocking, or one legacy `grok --resume` fallback |
+| GitHub Copilot CLI | `agentStop` hook in `.github/hooks/firstmate-primary.json` | Blocking hook that compels one continuation, never parks |
 | Antigravity | `Stop` hook in `.agents/hooks.json` | Synchronous Stop-hook park running `bin/fm-watch-arm.sh` (or the supervision host) with bounded repair nag via `bin/fm-turnend-guard.sh --agy` |
 
 The registrations in detail:
@@ -294,6 +295,12 @@ The registrations in detail:
   The environment (`COPILOT_CLI`, `CLAUDE_PROJECT_DIR`) is inherited by children and is never the signal.
   `bin/fm-subagent-pretool-check.sh` stands down for Copilot only, because its Cursor behavior is unchanged.
   [`verification/copilot.md`](verification/copilot.md) "Claude-shaped payloads" records the compared payloads.
+- GitHub Copilot CLI registers `agentStop` in `.github/hooks/firstmate-primary.json`, anchored through `$COPILOT_PROJECT_DIR`.
+  `bin/fm-turnend-guard-copilot.sh` runs the shared guard and turns its exit status 2 into `{"decision":"block","reason":"..."}`, which Copilot queues as a follow-up message.
+  The continuation's stop carries `stop_hook_active: true`, which bounds the block to one per turn, and Copilot's own cap of eight consecutive blocks is the second backstop.
+  The adapter never parks, because a parked Copilot pane ignores typing, Escape, Ctrl-C, and `/exit` until the hook returns.
+  An interrupted turn never reaches `agentStop`, so that boundary is unguarded, as on omp.
+  Supervision itself is the separate typed wake in `bin/fm-copilot-wake.sh`, whose live watcher is what the guard checks.
 - Grok registers a `Stop` hook in `.grok/hooks/fm-primary-turnend-guard.json` and delegates capability selection to `bin/fm-turnend-guard-grok.sh`.
   The tracked Claude Stop entries are inert when `GROK_AGENT` or `GROK_HOOK_EVENT` is present, so Grok's Claude-compatible settings loading cannot create a second continuation path.
   Both markers are required because Grok does not inject the same variables into every process kind.
@@ -646,6 +653,7 @@ It also covers true-reason banner wording and reason-keyed episode dedup survivi
 
 `tests/fm-kimi-harness.test.sh` covers the separate Kimi crew hook's format preservation, idempotence, refusal cases, token guard, spawn registration, and teardown cleanup.
 `tests/fm-supervision-instructions.test.sh` covers recovery-line ownership and pi-signed's identity-preserving reuse of Pi's protocol.
+`tests/fm-copilot-primary.test.sh` covers the Copilot adapter's block object, the `stop_hook_active` bound, the subagent and worker-worktree stand-downs, and the tracked registration.
 `tests/fm-omp-harness.test.sh` covers the omp extension pair over a fake omp API (forced continuation on exit 2, the `stop_hook_active` bound, the seatbelt block, the ownership proof).
 
 The opt-in live tests are:

@@ -401,7 +401,8 @@ The hook fires when the first prompt is submitted, not when the pane opens.
 The payload type also lists `startup`, which a real session was not seen to send; it routes as `startup`.
 The same registration carries the primary's `preToolUse` seatbelts through `bin/fm-pretool-copilot.sh`; [the cd guard](cd-guard.md), [the arm guard](arm-pretool-check.md), and [the subagent guard](subagent-guard.md) own their decisions.
 A worker's per-task plugin (`bin/fm-copilot-plugin.sh`) carries neither hook, and a Firstmate worktree that carries this registration stands both adapters down by primary scope.
-The turn-end guard and wake delivery for a Copilot primary are not part of this registration.
+The same registration carries the turn-end guard ([owner](turnend-guard.md)) and the turn boundaries that `bin/fm-copilot-wake.sh` reads.
+The adapter names the harness for the digest with `FM_COPILOT_HARNESS`, because that process chain is deeper than the eight levels `bin/fm-harness.sh` climbs.
 
 ### Copilot compaction
 

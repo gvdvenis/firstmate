@@ -37,7 +37,7 @@ if [ -z "$SOURCE" ] && [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
   SOURCE=$(cat 2>/dev/null | jq -r '(.source // empty) | strings' 2>/dev/null || true)
 fi
 
-DIGEST=$("$SCRIPT_DIR/fm-sessionstart-run.sh" --source "${SOURCE:-startup}" </dev/null 2>/dev/null || true)
+DIGEST=$(FM_COPILOT_HARNESS=copilot "$SCRIPT_DIR/fm-sessionstart-run.sh" --source "${SOURCE:-startup}" </dev/null 2>/dev/null || true)
 [ -n "$DIGEST" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 jq -cn --arg c "$DIGEST" '{additionalContext:$c}' 2>/dev/null || true
