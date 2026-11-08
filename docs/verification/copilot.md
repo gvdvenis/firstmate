@@ -107,6 +107,34 @@ They bear on a Copilot primary, which remains unsupported.
 - `sessionStart` printing `{"additionalContext":"..."}` put that text in front of the model before its first reply.
 - Copilot also loads a trusted project's `.claude/settings.json` hooks and delivers Claude-shaped payloads (`tool_name` `Bash`, `tool_input.command`, `hook_event_name`) with `CLAUDE_PROJECT_DIR`, `COPILOT_CLI`, and `COPILOT_PROJECT_DIR` set for the hook.
 
+## Claude-shaped payloads
+
+On 2026-11-08, Copilot 1.0.105 in a `-p` run with a relocated `COPILOT_HOME` that trusted only a scratch project ran a recording hook from that project's `.claude/settings.json` for `SessionStart`, `PreToolUse`, `UserPromptSubmit`, and `Stop`.
+Claude Code 2.x in a `claude -p` run with the same recording hooks gave the Claude side of the comparison.
+Copilot payload keys, per event (all four carry `hook_event_name`, `session_id`, `timestamp`, and `cwd`):
+
+```text
+SessionStart      source, initial_prompt
+PreToolUse        tool_name, tool_input
+UserPromptSubmit  prompt
+Stop              transcript_path, stop_reason, stop_hook_active
+```
+
+Claude payload keys on the same events:
+
+```text
+SessionStart      session_id, transcript_path, cwd, hook_event_name, source
+PreToolUse        session_id, transcript_path, cwd, prompt_id, permission_mode, effort, hook_event_name, tool_name, tool_input, tool_use_id
+UserPromptSubmit  session_id, transcript_path, cwd, prompt_id, permission_mode, hook_event_name, prompt
+Stop              session_id, transcript_path, cwd, prompt_id, permission_mode, effort, hook_event_name, stop_hook_active, last_assistant_message, background_tasks, session_crons
+```
+
+- `timestamp` (ISO-8601 with a `Z` suffix, such as `2026-01-01T00:00:00.000Z`) is present on every Copilot payload and absent from every Claude payload above, so it separates the two for all four events.
+- `stop_reason` is not a usable signal alone because it is present only on `Stop`.
+- `bin/fm-hook-host-lib.sh` requires the `timestamp` string and the absence of `permission_mode`, `prompt_id`, and `tool_use_id`, none of which Copilot sends, so a Claude release that adds `timestamp` does not stand Claude down.
+- A payload that is not an object, has no `timestamp`, or cannot be parsed runs the entry.
+- `bash tests/fm-copilot-claude-standdown.test.sh` pins the sanitized shapes against each affected entrypoint.
+
 ## Teardown of a live worker
 
 On 2026-11-06, in a scratch Firstmate home on a private tmux socket with a local-origin project, a Copilot scout was spawned with the per-task home, replied through a steer, and was torn down with `fm-teardown.sh` while its agent was still running.

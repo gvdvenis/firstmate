@@ -289,6 +289,11 @@ The registrations in detail:
   The guarded set is the `SessionStart` entry, the two `PreToolUse` Bash entries, and both `Stop` entries.
   Cursor 2026.08.11-e8db854 does not fire the Claude-shaped `Stop` entry at all, but it is guarded anyway because Cursor has no `asyncRewake`.
   If a later build did fire it, `bin/fm-claude-stop-autoarm.sh` would run synchronously inside Cursor's stop step and hold that turn open for its declared multi-hour timeout, exactly the wedge grok 1.0.0 produced.
+- GitHub Copilot CLI also loads `<project>/.claude/settings.json` and has no `asyncRewake`, so the same predicate treats its payloads as foreign.
+  The signal is an ISO-8601 `timestamp` string that every Copilot hook payload carries and Claude's `SessionStart`, `PreToolUse`, `UserPromptSubmit`, and `Stop` payloads do not, and it additionally requires the absence of `permission_mode`, `prompt_id`, and `tool_use_id`.
+  The environment (`COPILOT_CLI`, `CLAUDE_PROJECT_DIR`) is inherited by children and is never the signal.
+  `bin/fm-subagent-pretool-check.sh` stands down for Copilot only, because its Cursor behavior is unchanged.
+  [`verification/copilot.md`](verification/copilot.md) "Claude-shaped payloads" records the compared payloads.
 - Grok registers a `Stop` hook in `.grok/hooks/fm-primary-turnend-guard.json` and delegates capability selection to `bin/fm-turnend-guard-grok.sh`.
   The tracked Claude Stop entries are inert when `GROK_AGENT` or `GROK_HOOK_EVENT` is present, so Grok's Claude-compatible settings loading cannot create a second continuation path.
   Both markers are required because Grok does not inject the same variables into every process kind.
