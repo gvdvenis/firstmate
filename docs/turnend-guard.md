@@ -300,6 +300,7 @@ The registrations in detail:
   The continuation's stop carries `stop_hook_active: true`, which bounds the block to one per turn, and Copilot's own cap of eight consecutive blocks is the second backstop.
   The adapter never parks, because a parked Copilot pane ignores typing, Escape, Ctrl-C, and `/exit` until the hook returns.
   An interrupted turn never reaches `agentStop`, so that boundary is unguarded, as on omp.
+  Supervision itself is the separate typed wake in `bin/fm-copilot-wake.sh`, whose live watcher is what the guard checks.
 - Grok registers a `Stop` hook in `.grok/hooks/fm-primary-turnend-guard.json` and delegates capability selection to `bin/fm-turnend-guard-grok.sh`.
   The tracked Claude Stop entries are inert when `GROK_AGENT` or `GROK_HOOK_EVENT` is present, so Grok's Claude-compatible settings loading cannot create a second continuation path.
   Both markers are required because Grok does not inject the same variables into every process kind.

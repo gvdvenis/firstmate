@@ -788,7 +788,8 @@ tests/fm-control-relaunch.test.sh 114115
 tests/fm-control.test.sh 72794
 tests/fm-copilot-claude-standdown.test.sh 3000
 tests/fm-copilot-harness.test.sh 8330
-tests/fm-copilot-primary.test.sh 3000
+tests/fm-copilot-primary.test.sh 6000
+tests/fm-copilot-wake.test.sh 50000
 tests/fm-copilot-signals-live-e2e.test.sh 69
 tests/fm-cortex-harness.test.sh 5400
 tests/fm-cortex-signals-live-e2e.test.sh 49

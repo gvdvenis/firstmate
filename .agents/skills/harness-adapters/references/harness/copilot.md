@@ -35,4 +35,4 @@ Early provider or build errors can leave the spawn-owned busy record open when `
 Typing while a turn runs queues the line (`Queued (1)`) rather than failing, so a draft is detectable but an in-flight steer is not refused.
 A subagent fires its own `userPromptSubmitted` and `agentStop` with `parentAgentId` in the payload, so the plugin hooks skip any payload carrying it and only the main agent's events open and close the turn.
 A hand-opened primary session gets the session-start digest and the pre-tool seatbelts from the tracked `.github/hooks/firstmate-primary.json` ([verification](../../../../../docs/verification/copilot.md#native-primary-hooks)); a worker on a Firstmate worktree loads that file too and both adapters stand down by primary scope.
-No primary Stop guard, watcher protocol, or secondmate hook was verified.
+The turn-end guard and the typed wake are verified on tmux ([verification](../../../../../docs/verification/copilot.md#typed-wake)); `bin/fm-copilot-wake.sh` owns the wake, and no secondmate hook was verified.

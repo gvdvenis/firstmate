@@ -21,6 +21,20 @@
         "bash": "\"$COPILOT_PROJECT_DIR\"/bin/fm-turnend-guard-copilot.sh",
         "timeoutSec": 30
       }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "bash": "\"$COPILOT_PROJECT_DIR\"/bin/fm-copilot-wake.sh turn busy user-prompt-submit",
+        "timeoutSec": 10
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "\"$COPILOT_PROJECT_DIR\"/bin/fm-copilot-wake.sh turn idle session-end",
+        "timeoutSec": 10
+      }
     ]
   }
 }

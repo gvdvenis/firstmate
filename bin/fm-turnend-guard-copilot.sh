@@ -40,10 +40,13 @@ SYNTH=$(printf '%s' "$PAYLOAD" | jq -ce '
 ' 2>/dev/null) || exit 0
 
 REASON=$(printf '%s' "$SYNTH" | "$SCRIPT_DIR/fm-turnend-guard.sh" 2>&1 >/dev/null)
-[ "$?" -eq 2 ] || exit 0
+if [ "$?" -ne 2 ]; then
+  printf '%s' "$PAYLOAD" | "$SCRIPT_DIR/fm-copilot-wake.sh" turn idle agent-stop
+  exit 0
+fi
 [ -n "$REASON" ] || REASON='tasks in flight, no live watcher - repair missing watcher supervision according to the session-start operating block before ending the turn'
 # shellcheck source=bin/fm-operational-input.sh
 . "$SCRIPT_DIR/fm-operational-input.sh"
-fm_operational_input_encode turn-end-guard "$REASON" ENCODED || exit 0
-jq -cn --arg r "$ENCODED" '{decision:"block",reason:$r}' 2>/dev/null || true
+fm_operational_input_encode turn-end-guard "$REASON" REASON || exit 0
+jq -cn --arg r "$REASON" '{decision:"block",reason:$r}' 2>/dev/null || true
 exit 0

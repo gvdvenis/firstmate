@@ -151,6 +151,11 @@ harness_marker() {
   # identified, and any rule that must be RELIABLE under grok has to test the hook
   # markers too (see .claude/settings.json Stop entries, docs/turnend-guard.md).
   [ "${GROK_AGENT:-}" = "1" ] && { echo grok; return; }
+  # FM_COPILOT_HARNESS=copilot is Firstmate-owned and set only by
+  # bin/fm-sessionstart-copilot.sh for the digest it runs, whose process chain is
+  # deeper than the eight levels harness_ancestry climbs. Copilot itself publishes
+  # no identity marker to a tool process (verified, copilot 1.0.105).
+  [ "${FM_COPILOT_HARNESS:-}" = copilot ] && { echo copilot; return; }
   # codex, opencode, kimi, muse, agy, devin, commandcode, polytoken, cortex, and kiro publish no harness-identity marker at all, so
   # they are never named here and are identified by ancestry alone. That is the
   # whole reason a foreign marker must not outrank ancestry: with markers winning
