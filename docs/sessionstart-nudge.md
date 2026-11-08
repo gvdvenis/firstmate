@@ -399,6 +399,8 @@ The hook fires when the first prompt is submitted, not when the pane opens.
 
 `/clear` ends the old session (`sessionEnd`) and starts a new one, so it is indistinguishable from a fresh launch and takes the redundant full digest rather than a re-emit.
 The payload type also lists `startup`, which a real session was not seen to send; it routes as `startup`.
+The same registration carries the primary's `preToolUse` seatbelts through `bin/fm-pretool-copilot.sh`; [the cd guard](cd-guard.md), [the arm guard](arm-pretool-check.md), and [the subagent guard](subagent-guard.md) own their decisions.
+A worker's per-task plugin (`bin/fm-copilot-plugin.sh`) carries neither hook, and a Firstmate worktree that carries this registration stands both adapters down by primary scope.
 The turn-end guard and wake delivery for a Copilot primary are not part of this registration.
 
 ### Copilot compaction
@@ -492,7 +494,10 @@ It uses a TERM-resistant digest that exceeds its budget and proves that the dige
 `tests/fm-copilot-primary.test.sh` proves the Copilot adapters over sanitized recorded payloads and the tracked registration's own command strings:
 
 - `sessionStart` emits the whole digest as `additionalContext` for `new`, nudges for `resume`, and takes the helm for an unrecognized source or an unreadable payload.
-- A linked worker worktree carrying the same registration gets no digest.
+- `preToolUse` renders the cd, watcher-arm, and subagent denies as `permissionDecisionReason` with exit 0 and an empty stderr.
+- Subagent-raised payloads, malformed payloads, and the observing tools `read_agent` and `list_agents` are allowed.
+- A linked worker worktree carrying the same registration gets no digest and no deny.
+- A worker plugin written by `bin/fm-copilot-plugin.sh` registers neither hook.
 
 ### Live run-tier guards
 
