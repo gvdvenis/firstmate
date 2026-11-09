@@ -39,8 +39,9 @@
 # the composer gets Enter only and is never retyped.
 #
 # It stands down when away mode starts, whose daemon owns the watcher, and when
-# the pane's agent exits. Only a tmux pane is supported; start refuses any other
-# backend. Its log is state/.copilot-wake.log.
+# the pane's agent exits. A tmux or Herdr pane is supported, found through
+# bin/fm-supervisor-target-lib.sh; start refuses any other backend. Its log is
+# state/.copilot-wake.log.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -113,8 +114,9 @@ cmd_start() {
   if ! fm_pid_alive "$pid"; then
     backend=$(discover_supervisor_backend) || backend=
     target=$(discover_supervisor_target) || target=
-    if [ "$backend" != tmux ] || ! fm_backend_target_exists tmux "$target"; then
-      echo "copilot wake: FAILED - needs a live tmux pane for this session (backend=${backend:-none}, target=${target:-none})"
+    case "$backend" in tmux|herdr) ;; *) backend= ;; esac
+    if [ -z "$backend" ] || ! fm_backend_target_exists "$backend" "$target"; then
+      echo "copilot wake: FAILED - needs a live tmux or Herdr pane for this session (backend=${backend:-none}, target=${target:-none})"
       exit 1
     fi
     # The caller is a model tool call, so a turn is running right now.
@@ -201,7 +203,8 @@ ring_tick() {
 }
 
 # fm_backend_tmux_agent_state needs a named session:window, and this target is the
-# pane id from $TMUX_PANE, so read the pane's foreground argv[0] list directly.
+# pane id from $TMUX_PANE, so read the pane's foreground argv[0] list directly;
+# a Herdr pane gives the same list through its own process-info read.
 # A foreground list without Copilot must repeat before it counts, because a
 # transient read can come back empty or partial.
 agent_gone() {
@@ -209,7 +212,10 @@ agent_gone() {
   if ! fm_backend_target_exists "$BACKEND" "$TARGET"; then
     return 0
   fi
-  names=$(fm_backend_tmux_foreground_argv0s "$TARGET" 2>/dev/null)
+  case "$BACKEND" in
+    herdr) names=$(fm_backend_herdr_foreground_argv0s "$TARGET" 2>/dev/null) ;;
+    *) names=$(fm_backend_tmux_foreground_argv0s "$TARGET" 2>/dev/null) ;;
+  esac
   while IFS= read -r name; do
     [ "${name##*/}" != copilot ] || { GONE_POLLS=0; return 1; }
   done <<NAMES
