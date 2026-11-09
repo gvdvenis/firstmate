@@ -212,13 +212,39 @@ The first prompt asked the model to run `bin/fm-copilot-wake.sh start`, and scri
 - A real session-start digest printed `primary harness: copilot`, `Lock: held by this session`, and the `Mode: GitHub Copilot CLI typed wake` protocol, after `bin/fm-sessionstart-copilot.sh` named the harness; without that the digest's process chain passed the eight levels `bin/fm-harness.sh` climbs and it reported `unknown`.
 - The doorbell is the ASCII record-backed form from `bin/fm-operational-input.sh`, so whether Copilot keeps U+2063 in a typed prompt was not measured.
 - A keystroke landing between the composer check and the typed line was not exercised; terminal input has no compare-and-type.
-- The wake was not run in a Herdr pane, and `bin/fm-copilot-wake.sh start` refuses every backend but tmux.
+- The wake on a Herdr pane is recorded in the next section.
 
 ```bash
 bash bin/fm-test-run.sh tests/fm-copilot-wake.test.sh tests/fm-copilot-primary.test.sh
 ```
 
 The portable suites pin the wait, re-ring, draft, picker, swallowed-Enter, interrupted-turn, and stand-down paths with a real tmux pane and no Copilot install.
+
+## Typed wake on a Herdr pane
+
+On 2026-11-09, Copilot 1.0.105 (model `claude-haiku-4.5`) ran in a real pane of Herdr 0.9.5, in a named lab session driven only through the guarded lab helper, in a plain clone of this repository with a relocated `COPILOT_HOME` that trusted only that clone.
+The first prompt asked the model to run `bin/fm-copilot-wake.sh start`, and scripted status lines drove a real `bin/fm-watch.sh`.
+The wake used the same grace settings as the tmux run (2 s poll, 8 s first re-ring, 25 s interrupted-turn grace).
+
+| Scenario | Observed |
+| --- | --- |
+| Idle pane, new status line | Doorbell typed with verdict `empty` 5 s after the status line, the model drained and acknowledged, queue empty 13 s after the ring |
+| `zzdraft words` left in the composer | No ring for 20 s with a row queued, draft unchanged, doorbell typed 3 s after `Ctrl+U` cleared it, then acknowledged |
+| Running turn (`sleep 40`) | No ring for 14 s with a row queued and the turn busy, doorbell typed 1 s after `agentStop`, then acknowledged |
+| `/exit` with the pane kept open by its shell | The wake process logged `stopped: the pane agent is gone` 6 s later and exited |
+
+- A Herdr pane exports `HERDR_ENV`, `HERDR_PANE_ID` and `HERDR_SESSION` to a process started from a model `bash` tool call, so `bin/fm-supervisor-target-lib.sh` named `<lab session>:<pane id>` and not the default session.
+- `herdr pane process-info` listed the Copilot process in the pane's foreground with argv[0] `copilot` and kernel name `MainThread` while idle and during a shell tool, so a foreground list without `copilot` means the agent exited. The sanitized body is `tests/captures/copilot-1.0.105-herdr/process-info.json`.
+- The doorbell went through the ordinary typed-input path (`pane send-text`, then Enter) and the composer read stayed `empty` before each ring, `pending` with the draft, and `empty` after.
+- Herdr's own agent state is not read by the wake; the busy record and composer verdict decide, as on tmux.
+- The same keystroke window between the composer check and the typed line exists on Herdr, and was not exercised.
+- Interrupted-turn grace (double Escape) was not re-run on Herdr; its logic is backend-independent and pinned on tmux.
+
+```bash
+bash bin/fm-test-run.sh tests/fm-copilot-wake-herdr.test.sh
+```
+
+That suite runs a stand-in Copilot pane in a throwaway named Herdr session and pins start, deferral, re-ring, the draft, a picker, stand-down, and a refused missing pane.
 
 ## Teardown of a live worker
 

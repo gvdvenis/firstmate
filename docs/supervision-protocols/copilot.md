@@ -4,7 +4,7 @@ When this session owns supervision and away mode is not active:
 1. Drain first with `bin/fm-wake-drain.sh`.
    After handling all emitted wakes and reconciling open decisions and unread status lines, run the exact `--ack-through` command printed as `WAKE_ACK_REQUIRED`; until then the work remains durable for idempotent re-handling after interruption.
 2. Start supervision once per session, as soon as work is under way, with `bin/fm-copilot-wake.sh start` as one ordinary foreground command, and confirm it printed `copilot wake: running`.
-   It starts one detached process that keeps `bin/fm-watch-arm.sh` running and returns at once; never add shell `&` and never run `bin/fm-watch-arm.sh` yourself.
+   It needs a live tmux or Herdr pane for this session, starts one detached process that keeps `bin/fm-watch-arm.sh` running, and returns at once; never add shell `&` and never run `bin/fm-watch-arm.sh` yourself.
 3. Do not wait inside the turn. End the turn normally; the pane stays free for the captain.
 4. A wake arrives as a typed line that names a record under `state/operational-inbox/`.
    Read that record, then run `bin/fm-wake-drain.sh` first and handle the wake.
