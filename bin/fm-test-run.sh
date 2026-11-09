@@ -335,7 +335,7 @@ family_for_basename() {
     fm-backend-herdr-agent-exit-shell-e2e.test.sh|\
     fm-herdr-attached-viewer-live-e2e.test.sh|fm-herdr-session-cleanup-e2e.test.sh|\
     fm-backend-herdr-smoke.test.sh|fm-backend-herdr-workspace-per-home-e2e.test.sh|\
-    fm-control-herdr-smoke.test.sh)
+    fm-control-herdr-smoke.test.sh|fm-copilot-wake-herdr.test.sh)
       printf '%s\n' real-herdr-gated
       ;;
     fm-backlog-handoff.test.sh|fm-on.test.sh|fm-remote-backlog-handoff.test.sh|\
@@ -790,6 +790,7 @@ tests/fm-copilot-claude-standdown.test.sh 3000
 tests/fm-copilot-harness.test.sh 8330
 tests/fm-copilot-primary.test.sh 6000
 tests/fm-copilot-wake.test.sh 50000
+tests/fm-copilot-wake-herdr.test.sh 40000
 tests/fm-copilot-signals-live-e2e.test.sh 69
 tests/fm-cortex-harness.test.sh 5400
 tests/fm-cortex-signals-live-e2e.test.sh 49
