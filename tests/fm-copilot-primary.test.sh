@@ -307,6 +307,47 @@ test_worker_plugin_does_not_carry_the_primary_hooks() {
   pass "copilot worker plugin: carries no sessionStart or preToolUse hook"
 }
 
+# --- secondmate home ---------------------------------------------------------------
+
+# make_mate_dir <base> <home>: the same linked-worktree shape as a worker, but
+# carrying the .fm-secondmate-home marker bin/fm-home-seed.sh publishes, which is
+# what makes a persistent secondmate a primary session in its own home.
+make_mate_dir() {
+  local base=$1 mate=$2
+  make_worker_dir "$base" "$mate"
+  printf 'copilot-mate\n' > "$mate/.fm-secondmate-home"
+}
+
+test_secondmate_home_runs_all_three_adapters() {
+  local base mate out
+  base=$(make_primary_dir "$TMP_ROOT/mate-base")
+  mate="$TMP_ROOT/mate-home"
+  make_mate_dir "$base" "$mate"
+  out=$(run_registered "$mate" sessionStart "$(session_payload new)")
+  case "$out" in *'FIRSTMATE DIGEST'*) ;; *) fail "a secondmate home must get the digest: $out" ;; esac
+  [ -s "$mate/state/digest-args" ] || fail "the digest did not run inside the secondmate home"
+  [ ! -s "$base/state/digest-args" ] || fail "the secondmate's digest ran against the parent's home"
+X
+  : > "$mate/state/task1.meta"
+  out=$(run_registered "$mate" agentStop "$(stop_payload)")
+  printf '%s' "$out" | jq -e '.decision == "block"' >/dev/null 2>&1 || fail "a secondmate with work in flight and no watcher must be blocked once: $out"
+  pass "copilot secondmate home: digest, seatbelts, and turn-end guard run scoped to the home"
+}
+
+test_secondmate_home_busy_records_stay_apart() {
+  local base mate gen
+  base=$(make_primary_dir "$TMP_ROOT/mate-busy-base")
+  mate="$TMP_ROOT/mate-busy-home"
+  make_mate_dir "$base" "$mate"
+  gen=$("$ROOT/bin/fm-busy-event.sh" arm "$base/state" copilot-mate)
+  "$ROOT/bin/fm-copilot-plugin.sh" "$base/state" copilot-mate "$gen" "$mate" || fail 'plugin writer failed for a secondmate'
+  printf '{"sessionId":"s","timestamp":%s,"prompt":"hi"}' "$TS" \
+    | env COPILOT_PROJECT_DIR="$mate" FM_HOME="$mate" bash -c "$(jq -r '.hooks.userPromptSubmitted[0].bash' "$base/state/copilot-mate.copilot-plugin/hooks/hooks.json")"
+  grep -q 'state=busy' "$base/state/copilot-mate.busy-state" || fail "the per-task plugin did not publish the mate's busy turn to the parent's state"
+  [ ! -e "$mate/state/copilot-mate.busy-state" ] || fail "the plugin wrote the parent's record into the mate's own state"
+  pass "copilot secondmate: the parent-side busy record comes from the per-task plugin, apart from the home's own turn record"
+}
+
 test_sessionstart_emits_additional_context_for_a_new_session
 test_sessionstart_routes_the_payload_source
 test_sessionstart_unrecognized_source_gets_the_full_digest
@@ -324,3 +365,5 @@ test_turnend_inert_in_a_worker_worktree
 test_session_lock_recognizes_copilot
 test_registration_covers_the_primary_events
 test_worker_plugin_does_not_carry_the_primary_hooks
+test_secondmate_home_runs_all_three_adapters
+test_secondmate_home_busy_records_stay_apart

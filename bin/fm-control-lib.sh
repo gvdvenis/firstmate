@@ -111,7 +111,7 @@ fm_control_harness_family() {  # <recorded-harness>
 }
 
 # Which task kinds an adapter is verified to run. muse, gemini, rovo, devin,
-# commandcode, polytoken, cortex, kiro, and copilot are crewmate/scout adapters only: none has a primary
+# commandcode, polytoken, cortex, and kiro are crewmate/scout adapters only: none has a primary
 # supervision protocol, and bin/fm-spawn.sh refuses a --secondmate launch on any of them. The control
 # plane asks this BEFORE it stops anything, so an incompatible relaunch target is
 # refused while the current agent is still running rather than after it has
@@ -121,7 +121,7 @@ fm_control_harness_supports_kind() {  # <harness> <kind>
   fm_control_harness_supported "$harness" || return 1
   case "$harness" in
     hermes) case "$kind" in ship|scout) ;; *) return 1 ;; esac ;;
-    muse|gemini|rovo|devin|commandcode|polytoken|cortex|kiro|copilot) [ "$kind" != secondmate ] || return 1 ;;
+    muse|gemini|rovo|devin|commandcode|polytoken|cortex|kiro) [ "$kind" != secondmate ] || return 1 ;;
   esac
   return 0
 }

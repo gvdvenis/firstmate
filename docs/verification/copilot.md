@@ -2,7 +2,7 @@
 
 Verified on 2026-11-04 on Linux (WSL2) with `GitHub Copilot CLI 1.0.105.` through a real pty.
 The [adapter reference](../../.agents/skills/harness-adapters/references/harness/copilot.md) owns operating limits; the [spawn header](../../bin/fm-spawn.sh) owns launch mechanics.
-Primary, secondmate, and every backend other than tmux and Herdr are unsupported and refused.
+Every backend other than tmux and Herdr is refused; a Copilot persistent secondmate is verified on both under Secondmate below.
 Vendor observations marked as a pty were made through a private pty; the Herdr trial section records what a real pane showed.
 
 ## Unanswerable questions
@@ -331,3 +331,23 @@ An earlier observation of "no dialog" came from a directory already in Copilot's
 `--model bogus-model` exited at launch with `Error: Model "bogus-model" from --model flag is not available.`
 `--reasoning-effort xhigh` on `gpt-6-luna` and `--reasoning-effort max` on `claude-sonnet-5.5` were accepted.
 No catalog listing command was found, so the spawn does not pre-validate the model.
+
+## Secondmate
+
+On 2026-11-10, Copilot CLI 1.0.105 ran as a persistent secondmate through `bin/fm-spawn.sh <id> <home> copilot --secondmate` in a scratch lab primary home, once on tmux 3.7c (private socket) and once on Herdr (a named `fm-lab-` session created and torn down by `bin/fm-herdr-lab.sh`).
+Each lab home was marked with `bin/fm-lab-home.sh`, and each mate home was a `git clone` of this branch seeded by `bin/fm-home-seed.sh <id> <home> --no-projects`, so it carried `.github/hooks/firstmate-primary.json`.
+The real `~/.copilot`, the real fleet, and every real Herdr workspace were untouched; the existing login was reused through the per-task `COPILOT_HOME`.
+Both backends behaved the same on every step:
+
+- **Launch:** the spawn recorded `kind=secondmate harness=copilot`, wrote `state/<id>.copilot-home` (trusting only the mate home) and `state/<id>.copilot-plugin` in the parent's state, and exported `FM_HOME=<mate home>` on the launch.
+- **Digest:** the session's `events.jsonl` held a successful `sessionStart` hook whose `additionalContext` began `SESSION START - <mate home>`, reported `lock acquired`, and carried the Copilot typed-wake operating instructions; the digest ran inside the mate home, so `state/.session-start-complete` appeared there and not in the parent.
+- **Seatbelts and guard:** `preToolUse` and `agentStop` hooks succeeded on every call and turn.
+- **Busy state:** the per-task plugin's `userPromptSubmitted` and `agentStop` moved the parent's `state/<id>.busy-state` between `busy` and `idle` (source `copilot-hook`).
+- **Steer:** `fm-send <id> <text>` wrote an inbox record and typed the doorbell; the mate moved the record to `handled/` and appended a `done [corr=...]` line to the parent's status, which `fm-crew-state` read as `done`.
+- **Typed wake:** the mate ran `bin/fm-copilot-wake.sh start`; `bin/fm-inbox.sh note` into the mate home then produced `ring: typed the doorbell (verdict=empty, head=1)`, and the mate drained the queue and acknowledged it (queue empty).
+- **Interrupt:** `fm-control interrupt` during a foreground `sleep 150` returned `interrupt-delivered ... verified=agent-alive cancel=unconfirmed` and the pane printed `Operation cancelled by user`.
+- **Exit:** `fm-control exit` returned `stopped`, the pane printed `Resume copilot --resume=<session-id>`, and the wake process logged `stopped: the pane agent is gone`.
+- **Relaunch:** `fm-control relaunch` started a new Copilot session in the same pane with its own `sessionStart` digest and a fresh `lock acquired`.
+
+Not exercised: an `/updatefirstmate` style restart (`bin/fm-secondmate-restart.sh`) of a live Copilot mate, a treehouse-leased linked-worktree mate home (the lab homes were clones, and the shared cd guard stays inert in a linked-worktree home by its own scope), a mate with real crewmates of its own, a remote secondmate, and a host whose Copilot token is not in the OS keyring.
+`tests/fm-copilot-harness.test.sh`, `tests/fm-copilot-primary.test.sh`, and `tests/fm-secondmate-liveness.test.sh` pin the portable parts: the spawn launch shape and trust scope, the three adapters running in a marked secondmate home, the separate busy records, and the liveness sweep's relaunch of a dead Copilot mate.

@@ -17,3 +17,4 @@ When this session owns supervision and away mode is not active:
 
 The mechanism, its idle proof, and its limits are owned by the header of `bin/fm-copilot-wake.sh`.
 `bin/fm-turnend-guard-copilot.sh` is the turn-end guard, and [`turnend-guard.md`](../turnend-guard.md) owns its contract.
+A persistent secondmate runs this same protocol in its own home, with its own wake process, queue, and watcher.
