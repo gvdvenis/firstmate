@@ -1,7 +1,8 @@
 # GitHub Copilot CLI
 
-Copilot is a spawned crewmate/scout TUI adapter on tmux and Herdr only.
-Primary and secondmate supervision and every other runtime backend are unsupported and refused.
+Copilot is a spawned crewmate, scout, and persistent secondmate TUI adapter on tmux and Herdr only.
+Every other runtime backend is refused.
+Adopting Copilot as this home's own primary is not part of that verification.
 A real Herdr pane and a real tmux pane have each run it with Copilot CLI 1.0.105 on 2026-11-05.
 Launch, interrupt, exit, relaunch, and teardown were exercised on both tmux and Herdr.
 [Copilot verification](../../../../../docs/verification/copilot.md) owns dated vendor evidence and what the backends have not yet exercised.
@@ -35,4 +36,13 @@ Early provider or build errors can leave the spawn-owned busy record open when `
 Typing while a turn runs queues the line (`Queued (1)`) rather than failing, so a draft is detectable but an in-flight steer is not refused.
 A subagent fires its own `userPromptSubmitted` and `agentStop` with `parentAgentId` in the payload, so the plugin hooks skip any payload carrying it and only the main agent's events open and close the turn.
 A hand-opened primary session gets the session-start digest and the pre-tool seatbelts from the tracked `.github/hooks/firstmate-primary.json` ([verification](../../../../../docs/verification/copilot.md#native-primary-hooks)); a worker on a Firstmate worktree loads that file too and both adapters stand down by primary scope.
-The turn-end guard and the typed wake are verified on tmux ([verification](../../../../../docs/verification/copilot.md#typed-wake)); `bin/fm-copilot-wake.sh` owns the wake, and no secondmate hook was verified.
+The turn-end guard and the typed wake are verified on tmux ([verification](../../../../../docs/verification/copilot.md#typed-wake)); `bin/fm-copilot-wake.sh` owns the wake.
+
+## Secondmate
+
+A secondmate launches through `fm-spawn.sh --secondmate` with the same per-task `COPILOT_HOME`, plugin, and `-i` launch as a worker, except that its worktree is the secondmate home and `FM_HOME` names that home.
+The home's own tracked `.github/hooks/firstmate-primary.json` then supplies the digest, the seatbelts, the turn-end guard, and the turn records for the typed wake, because the `.fm-secondmate-home` marker makes the home a primary scope; the per-task plugin keeps publishing the mate's busy turns to the parent's `state/<id>.busy-state`, which `fm-crew-state` and the active-turn gate read.
+The mate starts its own wake with `bin/fm-copilot-wake.sh start` once work is under way, and the wake process stands down when the pane's agent exits.
+`fm-send` steers, `fm-control` interrupt, exit and relaunch, and the liveness sweep's relaunch use the same mechanics as for a worker.
+The shared cd guard stays inert in a secondmate home that is a linked worktree (`docs/cd-guard.md` owns that scope), and an interrupted turn leaves the parent's busy record open until the next prompt, as for a worker.
+[Verification](../../../../../docs/verification/copilot.md#secondmate) records what a live mate on tmux and Herdr did.

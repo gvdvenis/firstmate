@@ -69,10 +69,10 @@ printf ' ◉ Working · 824 B esc again to interrupt\n' | grep -Eq "$(fm_control
 [ "$(fm_control_exit_command copilot)" = /exit ] || fail 'wrong exit command'
 fm_control_harness_supports_kind copilot ship || fail 'ship refused'
 fm_control_harness_supports_kind copilot scout || fail 'scout refused'
-! fm_control_harness_supports_kind copilot secondmate || fail 'secondmate accepted'
+fm_control_harness_supports_kind copilot secondmate || fail 'secondmate refused'
 hazard=$(fm_control_interrupt_hazard_signal copilot)
 printf ' Rewind to a previous point\n  ↑↓ Navigate · Enter Select · Esc Cancel\n' | grep -Eq "$hazard" || fail 'rewind picker not recognized'
-pass "worker-only resolution and lifecycle capabilities"
+pass "resolution and lifecycle capabilities for every task kind"
 
 # Captured from a copilot 1.0.105 pty session: one `❯` row between two full-width
 # rules, a single footer row below, and the same shape while a turn is running.
@@ -220,9 +220,24 @@ assert_contains "$launch" ' -i "$(' 'interactive prompt flag missing'
 assert_present "$home/state/copilot-worker.copilot-plugin/hooks/hooks.json" 'spawn did not wire hooks'
 [ "$(fm_busy_classify tmux fake:w copilot copilot-worker "$home/state")" = 'busy fm-spawn' ] || fail 'launch not armed'
 assert_grep 'harness=copilot' "$home/state/copilot-worker.meta" 'harness not recorded'
-if out=$(fm_test_run_spawn "$home" "$wt" "$fakebin" copilot-sm "$proj" --secondmate --harness copilot 2>&1)
-then fail 'Copilot secondmate launch accepted'; fi
-assert_contains "$out" 'crewmate/scout adapter only' 'wrong secondmate refusal'
+sm_home="$case_dir/sm-home"
+mkdir -p "$sm_home/bin" "$sm_home/data" "$sm_home/.github/hooks"
+printf '# Firstmate\n' > "$sm_home/AGENTS.md"
+printf 'copilot-sm\n' > "$sm_home/.fm-secondmate-home"
+printf 'charter\n' > "$sm_home/data/charter.md"
+printf '%s\n' 'projects/' 'state/' 'data/' 'config/' > "$sm_home/.gitignore"
+git -C "$sm_home" init -q -b main
+fm_test_spawn_brief "$home" copilot-sm
+if ! out=$(FM_FAKE_LAUNCH_LOG="$case_dir/launch-sm" fm_test_run_spawn "$home" "$sm_home" "$fakebin" copilot-sm "$sm_home" --secondmate --harness copilot 2>&1)
+then fail "Copilot secondmate spawn failed: $out"; fi
+sm_launch=$(cat "$case_dir/launch-sm")
+assert_contains "$sm_launch" "COPILOT_HOME='$home/state/copilot-sm.copilot-home'" 'secondmate per-task Copilot home missing'
+assert_contains "$sm_launch" "--plugin-dir '$home/state/copilot-sm.copilot-plugin'" 'secondmate busy plugin missing'
+assert_contains "$sm_launch" "FM_HOME='$sm_home'" 'secondmate launch is not scoped to its own home'
+jq -e --arg wt "$(cd "$sm_home" && pwd -P)" '.trustedFolders == [$wt]' "$home/state/copilot-sm.copilot-home/config.json" >/dev/null \
+  || fail 'secondmate Copilot home does not trust exactly the secondmate home'
+[ "$(fm_busy_classify tmux fake:w copilot copilot-sm "$home/state")" = 'busy fm-spawn' ] || fail 'secondmate launch not armed'
+assert_grep 'harness=copilot' "$home/state/copilot-sm.meta" 'secondmate harness not recorded'
 proj2="$case_dir/project2"
 wt2="$case_dir/wt2"
 fm_git_worktree "$proj2" "$wt2" copilot-low
@@ -239,7 +254,7 @@ if ! out=$(FM_ROOT_OVERRIDE='' FM_HOME="$home" HOME="$home/user-home" FM_STATE_O
   "$ROOT/bin/fm-teardown.sh" copilot-worker --force 2>&1); then fail "teardown failed: $out"; fi
 assert_absent "$home/state/copilot-worker.copilot-home" 'teardown left the per-task Copilot home'
 assert_absent "$home/state/copilot-worker.copilot-plugin" 'teardown left the plugin directory'
-pass "scout launch carries autonomy, trusted home, plugin, typed brief and hooks; secondmate refused"
+pass "scout launch carries autonomy, trusted home, plugin, typed brief and hooks; secondmate launch is scoped to its own home"
 
 # The composer and interrupt reads are proven only on tmux and Herdr, so every
 # other spawn-capable backend is refused before any endpoint, worktree, or busy
