@@ -46,7 +46,7 @@ Codex's interactive TUI has verified session-open delivery only on the native ve
 | Antigravity (agy) | Run | [Antigravity (agy)](#antigravity-agy) |
 | GitHub Copilot CLI | Run | [GitHub Copilot CLI](#github-copilot-cli) |
 | Cursor compaction | Uncovered | [Cursor compaction](#cursor-compaction) |
-| Copilot compaction | Uncovered | [Copilot compaction](#copilot-compaction) |
+| Copilot compaction | Covered | [Copilot compaction](#copilot-compaction) |
 
 ### Why the run tier exists
 
@@ -406,11 +406,12 @@ The adapter names the harness for the digest with `FM_COPILOT_HARNESS`, because 
 
 ### Copilot compaction
 
-Copilot compaction is uncovered and has no tracked transport.
-`/compact` fires only `preCompact` and no `sessionStart` afterwards.
-Whether `preCompact` output can inject context was not verified, so Firstmate registers nothing for it.
-A compacted Copilot session keeps whatever context survived rather than receiving a fresh digest.
-Observed on 2026-11-11 on tmux and Herdr: after `/compact` the model no longer held the digest, and on tmux it reran `bin/fm-session-start.sh` when asked what its project instructions say to do at session start ([evidence](verification/copilot.md#copilot-as-this-homes-primary)).
+Copilot compaction is covered by `bin/fm-copilot-compact.sh`, a two-step transport, because Copilot discards `preCompact` output and fires no `sessionStart` after a compaction.
+`preCompact` records the compacted session's id in `state/.copilot-compacted`.
+The next `userPromptSubmitted` or `postToolUse` from that same session claims the record with one rename and returns the `--source compact` re-emit digest as `additionalContext`, once.
+`postToolUse` covers an automatic compaction that lands mid-turn, after the prompt hook already fired.
+It stands down by primary scope like the other Copilot adapters, and skips payloads that carry `parentAgentId`, so workers and subagents never receive it.
+Unprompted, no model reran session start after a compaction, and one lost track of which home it serves, so the hook, not the model, restores the digest ([evidence](verification/copilot.md#compaction-re-emit)).
 
 ### Cursor compaction
 
