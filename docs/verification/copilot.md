@@ -374,6 +374,21 @@ Measured on copilot 1.0.109 on tmux:
 Portable regression: `tests/fm-copilot-primary.test.sh`.
 Live check, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone of the branch, lab `FM_HOME`, relocated `COPILOT_HOME` trusting only the clone, scrubbed environment, Claude Haiku 4.5): a first prompt received the startup digest through `sessionStart`; `/compact` ran; the next prompt carried the re-emit once (`userPromptSubmitted` hook output of 8455 bytes, and the model quoted its first line, "This session already took the helm at its own startup and has only lost its context."); the prompt after that carried none (hook output 4 bytes, `transformedContent` without the re-emit).
 
+## Combined branch run
+
+On 2026-11-11 the five Copilot branches (primary support, Herdr resume and lab, 1.0.109 pins and version warning, keystroke narrowing, compaction re-emit) were merged on top of the Copilot secondmate commit and run together with Copilot 1.0.109 and tmux 3.7c on Linux (WSL2).
+Three merges conflicted only in the "Still not exercised" list below; each kept one statement per fact.
+
+- `bin/fm-test-run.sh` passed every `tests/fm-copilot-*.test.sh` (`tests/fm-copilot-signals-live-e2e.test.sh` capability-skipped without its opt-in), `tests/fm-daemon.test.sh`, `tests/fm-harness-precedence.test.sh`, `tests/fm-afk-launch.test.sh`, `tests/fm-secondmate-liveness.test.sh` and `tests/fm-documentation-audiences.test.sh`; `bin/fm-lint.sh` passed with shellcheck 0.11.0 and actionlint 1.7.12.
+- The tests need a real `tmux` binary first on `PATH`. With a version-manager shim of `tmux` first, the shim of `tests/fm-copilot-wake.test.sh` re-invoked itself until the run was stopped.
+- `tests/fm-copilot-wake.test.sh` failed on the keystroke branch alone ("the ring did not refuse after the key landed"): its fake pane kept the cursor below the footer, so a typed key never moved it and the late cursor guard could not see it. The fake pane now ends each draw with the cursor on the composer line, as Copilot does; `bin/` is unchanged.
+- Live smoke on a private tmux socket, a scratch clone of the merged branch, a lab `FM_HOME`, a relocated `COPILOT_HOME` trusting only that clone, a scrubbed environment and Claude Haiku 4.5, opened by hand as the primary in one session:
+  - the first prompt received the digest through `sessionStart` (11256 bytes); the model quoted `primary harness: copilot` and the lock line;
+  - a status line was typed back as one doorbell, and the model drained and acknowledged the queue (`--ack-through`);
+  - `/compact` completed; the next prompt carried one `userPromptSubmitted` output of 8681 bytes (the other three returned 4 bytes), and the model quoted the re-emit's first line;
+  - `/exit` returned the pane to its shell with the `Resume copilot --resume=<id>` line, and the wake log recorded `stopped: the pane agent is gone`.
+- Not exercised in the combined run: Herdr (covered by the branches' own sections and by the Herdr wake suite, which ran against its lab session), an update restart, and a natural automatic compaction.
+
 ## Still not exercised
 
 - A live host that keeps the Copilot token in `config.json` rather than the OS keyring (the copy is only pinned with fake values).
