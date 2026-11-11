@@ -38,8 +38,8 @@ model_args=()
 
 # The driver prints "<comm>\t<argv0>" of the live copilot process once the first
 # turn has settled, then types /exit and reports the child's exit status.
-driver=$(cat <<'PY'
-import os, pty, select, struct, fcntl, termios, sys, time, signal
+IFS= read -r -d '' driver <<'PY' || true
+import os, pty, subprocess, select, struct, fcntl, termios, sys, time, signal
 state, plugin, work, release = sys.argv[1:5]
 extra = sys.argv[5:]
 pid, fd = pty.fork()
@@ -76,8 +76,10 @@ while time.time() < deadline:
     if seen_busy and ' state=idle ' in r:
         break
     pump(0.2)
-comm = open('/proc/%d/comm' % pid).read().strip()
-argv0 = open('/proc/%d/cmdline' % pid, 'rb').read().split(b'\0')[0].decode()
+def ps(field):
+    return subprocess.check_output(['ps', '-o', field + '=', '-p', str(pid)]).decode().strip()
+comm = ps('comm')
+argv0 = ps('args').split(' ')[0]
 print('%s\t%s\t%s' % (comm, argv0, 'busy-seen' if seen_busy else 'busy-missed'), flush=True)
 pump(2)
 os.write(fd, b'/exit'); pump(1); os.write(fd, b'\r')
@@ -94,8 +96,7 @@ if not done:
 else:
     print('exit-%d' % (os.waitstatus_to_exitcode(status)), flush=True)
 PY
-)
-identity=$(cd "$LAB" && python3 -I -c "$driver" "$STATE" "$STATE/live.copilot-plugin" "$WORK" "$RELEASE" "${model_args[@]}") \
+identity=$(cd "$LAB" && python3 -I -c "$driver" "$STATE" "$STATE/live.copilot-plugin" "$WORK" "$RELEASE" ${model_args[@]+"${model_args[@]}"}) \
   || fail 'driver failed'
 exit_note=$(printf '%s\n' "$identity" | tail -1)
 identity=$(printf '%s\n' "$identity" | head -1)

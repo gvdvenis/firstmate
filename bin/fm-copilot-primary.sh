@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Start a GitHub Copilot CLI primary so its typed wake has a pane to type into.
+# Usage: bin/fm-copilot-primary.sh [copilot args...]
+#
+# The typed wake (bin/fm-copilot-wake.sh) works by typing into the primary's own
+# tmux or Herdr pane and refuses to start without one, so a Copilot opened from a
+# plain or editor terminal has no supervision. Inside tmux or Herdr this just runs
+# `copilot` here; otherwise it opens Copilot in a tmux session named for this home
+# (`-A` re-attaches a running one, so a second start never makes a second Copilot).
+# Pass the launch recipe's flags through, e.g. --no-auto-update --allow-all
+# (docs/supervision-protocols/copilot.md). Native Windows is not supported; use WSL2.
+# FM_COPILOT_BIN names the executable; FM_COPILOT_PRIMARY_DETACH=1 starts the tmux
+# session detached (for tests).
+set -u
+
+ROOT=${FM_ROOT_OVERRIDE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
+COPILOT=${FM_COPILOT_BIN:-copilot}
+if [ -n "${TMUX_PANE:-}" ] || { [ "${HERDR_ENV:-}" = 1 ] && [ -n "${HERDR_PANE_ID:-}" ]; }; then
+  cd "$ROOT" && exec "$COPILOT" "$@"
+fi
+command -v tmux >/dev/null 2>&1 || {
+  echo 'error: a Copilot primary needs tmux or Herdr; install tmux (brew install tmux / apt install tmux) or open it inside Herdr' >&2
+  exit 1
+}
+name=fm-copilot-$(printf '%s' "$ROOT" | cksum | cut -d ' ' -f 1)
+exec tmux new-session ${FM_COPILOT_PRIMARY_DETACH:+-d} -A -s "$name" -c "$ROOT" "$COPILOT" "$@"

@@ -25,7 +25,7 @@ SCOUT_ROUTE='first classify the work under the AGENTS.md intake contract: work a
 # This inventory is shape-classification coverage for the shipped guard and the
 # recommended local Claude deny-list hardening list, but tracked settings must
 # not ship that Claude-only permissions layer.
-DELEGATION_TOOLS='Task Agent Workflow RemoteTrigger Monitor ScheduleWakeup SendMessage EnterWorktree ExitWorktree CronCreate CronDelete CronList TaskCreate TaskGet TaskList TaskUpdate TaskStop TaskOutput'
+DELEGATION_TOOLS='Task Agent Workflow RemoteTrigger Monitor ScheduleWakeup SendMessage EnterWorktree ExitWorktree CronCreate CronDelete CronList TaskCreate TaskGet TaskList TaskUpdate TaskStop TaskOutput create_session send_session_message'
 
 # Tools that must stay available: denying these would break ordinary work.
 PRESERVED_TOOLS='Bash Edit Read Write Skill ToolSearch WebFetch WebSearch NotebookEdit ReportFindings DesignSync PushNotification'
@@ -142,6 +142,11 @@ test_guard_never_classifies_mcp_tools() {
               mcp__acme__spawn_agent mcp__slack__slack_send_message; do
     expect_allow "MCP tool" "$tool"
   done
+  # Copilot names MCP tools <server>-<tool>.
+  for tool in github-mcp-server-list_workflows github-mcp-server-run_workflow githubiq-create_task; do
+    expect_allow "Copilot MCP tool" "$tool"
+  done
+  expect_deny "near-miss of a Copilot MCP prefix" "not-github-mcp-server-run_workflow"
   pass "MCP tool names are never classified as harness delegation"
 }
 

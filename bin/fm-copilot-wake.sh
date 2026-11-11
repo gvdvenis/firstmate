@@ -125,7 +125,7 @@ cmd_start() {
     target=$(discover_supervisor_target) || target=
     case "$backend" in tmux|herdr) ;; *) backend= ;; esac
     if [ -z "$backend" ] || ! fm_backend_target_exists "$backend" "$target"; then
-      echo "copilot wake: FAILED - needs a live tmux or Herdr pane for this session (backend=${backend:-none}, target=${target:-none})"
+      echo "copilot wake: FAILED - needs a live tmux or Herdr pane for this session; start Copilot with bin/fm-copilot-primary.sh (backend=${backend:-none}, target=${target:-none})"
       exit 1
     fi
     # The caller is a model tool call, so a turn is running right now.

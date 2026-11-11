@@ -95,7 +95,7 @@
 # launch whose busy record never advanced past the fm-spawn seed is
 # indistinguishable, from the record alone, between "still reading its
 # brief" and "parked on an interactive prompt the harness never gets past
-# without a human" - a Claude/Gemini/Pi workspace-trust dialog, a sign-in or
+# without a human" - a Claude/Gemini/Pi workspace-trust dialog, a Copilot sign-in failure, a sign-in or
 # auth-method picker, or a first-run setup menu. Left alone this reads as
 # ordinary busy for the full BUSY_TURN_MAX_SECS (one hour) before the
 # separate wedge-suspect bound even looks at it. The signature table matches
@@ -1114,10 +1114,19 @@ fm_busy_gemini_launch_prompt_tail() {
   printf '%s' "$buf" | grep -qiE "${FM_BUSY_GEMINI_APIKEY_PROMPT_REGEX:-Enter Gemini API Key}"
 }
 
+# Copilot with no usable login (copilot 1.0.109): `Please use /login to sign in
+# to use Copilot` when no token is found, `Authentication token found but could
+# not be validated.` when it is rejected; the TUI then waits for a human.
+fm_busy_copilot_launch_prompt_tail() {
+  local buf
+  buf=$(cat)
+  printf '%s' "$buf" | grep -qE 'Please use /login to sign in to use Copilot|Authentication token found but could not be validated'
+}
+
 # fm_busy_launch_prompt_parked: dispatch to the signature above for <harness>,
 # or fail when this harness has none. Consumes the tail on stdin. Scoped to
 # exactly the harnesses fm-spawn.sh arms with the fm-spawn busy source
-# (claude*, opencode*, pi, pi-signed, omp, gemini) since only those can ever
+# (claude*, opencode*, pi, pi-signed, omp, gemini, copilot) since only those can ever
 # read a pinned "busy fm-spawn" record; codex and standalone Kimi already
 # classify unknown before a record is ever consulted, and opencode ships no
 # trust dialog at all.
@@ -1126,6 +1135,7 @@ fm_busy_launch_prompt_parked() {  # <harness>
     claude*) fm_busy_claude_launch_prompt_tail ;;
     pi | pi-signed | omp) fm_busy_pi_launch_prompt_tail ;;
     gemini) fm_busy_gemini_launch_prompt_tail ;;
+    copilot) fm_busy_copilot_launch_prompt_tail ;;
     *) return 1 ;;
   esac
 }

@@ -182,19 +182,6 @@ ancestry_names_omp() {
   return 1
 }
 
-# True when the process's argv[0] is exactly `copilot`. The kernel name of the
-# Copilot CLI is `MainThread`, so argv[0] is the only identity. Linux argv
-# fields preserve spaces; the ps fallback reads the first whitespace word.
-fm_copilot_args_are_copilot() {  # <args> [pid]
-  local args=${1:-} pid=${2:-} first=
-  if [ -n "$pid" ] && [ -r "/proc/$pid/cmdline" ]; then
-    IFS= read -r -d '' first < "/proc/$pid/cmdline" || true
-  else
-    first=${args%% *}
-  fi
-  [ "${first##*/}" = copilot ]
-}
-
 # Print "<strength> <harness>" when one process identifies a harness, or nothing.
 # Strength records how the match was made:
 #   comm - the ancestor's own executable name identifies the harness. This is a

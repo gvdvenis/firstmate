@@ -214,17 +214,17 @@ jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.firstLaunchAt == "x" and .trustedF
 # Login carry: only the three login keys are copied from the real config.json, never printed.
 login_src="$TMP_ROOT/login-src"
 mkdir -p "$login_src"
-printf '// managed\n{"copilotTokens":{"https://github.com:u":"fake-token"},"loggedInUsers":[{"host":"https://github.com","login":"u"}],"lastLoggedInUser":{"host":"https://github.com","login":"u"},"model":"x","trustedFolders":["/elsewhere"]}\n' > "$login_src/config.json"
+printf '// managed\n{"authTokens":{"https://github.com:u":"fake-auth"},"copilotTokens":{"https://github.com:u":"fake-token"},"loggedInUsers":[{"host":"https://github.com","login":"u"}],"lastLoggedInUser":{"host":"https://github.com","login":"u"},"model":"x","trustedFolders":["/elsewhere"]}\n' > "$login_src/config.json"
 rm -rf "$state/login.copilot-home"
 COPILOT_HOME="$login_src" "$ROOT/bin/fm-copilot-plugin.sh" "$state" login "$gen" "$wt_home" > "$TMP_ROOT/login.out" 2>&1 || fail 'login seeding failed'
 lc="$state/login.copilot-home/config.json"
-jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.copilotTokens["https://github.com:u"] == "fake-token" and .loggedInUsers[0].login == "u" and .lastLoggedInUser.login == "u" and .trustedFolders == [$wt] and (keys | sort) == ["copilotTokens","lastLoggedInUser","loggedInUsers","trustedFolders"]' "$lc" >/dev/null || fail 'login keys not carried alone'
+jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.authTokens["https://github.com:u"] == "fake-auth" and .copilotTokens["https://github.com:u"] == "fake-token" and .loggedInUsers[0].login == "u" and .lastLoggedInUser.login == "u" and .trustedFolders == [$wt] and (keys | sort) == ["authTokens","copilotTokens","lastLoggedInUser","loggedInUsers","trustedFolders"]' "$lc" >/dev/null || fail 'login keys not carried alone'
 [ "$(stat -c %a "$lc" 2>/dev/null || stat -f %Lp "$lc")" = 600 ] || fail 'task config is not mode 600'
 ! grep -q fake-token "$TMP_ROOT/login.out" || fail 'token value printed'
 printf '{"model":"x"}\n' > "$login_src/config.json"
-rm -rf "$state/login.copilot-home"
+# Re-seed over the earlier login copy: a source without a login must clear it.
 COPILOT_HOME="$login_src" "$ROOT/bin/fm-copilot-plugin.sh" "$state" login "$gen" "$wt_home" || fail 'seeding without login keys failed'
-jq -e '(keys | sort) == ["trustedFolders"]' "$lc" >/dev/null || fail 'keys added from a source without a login'
+jq -e '(keys | sort) == ["trustedFolders"]' "$lc" >/dev/null || fail 'a source without a login kept or added login keys'
 printf '{ not json' > "$login_src/config.json"
 rm -rf "$state/login.copilot-home"
 COPILOT_HOME="$login_src" "$ROOT/bin/fm-copilot-plugin.sh" "$state" login "$gen" "$wt_home" || fail 'unparsable source not tolerated'
