@@ -12,6 +12,13 @@
 # `source` (`new`, `resume`) that the run wrapper routes, so this adapter reads
 # it from stdin; `--source` overrides it for a registration that knows better.
 #
+# A `resume` (`copilot --resume <id>` or `--continue`) is a new process that
+# restored an old conversation, so the lock is not ours and no wake process runs.
+# The run wrapper's nudge for `resume` is only an instruction, which a resumed
+# model followed past in favor of the restored conversation (docs/verification/
+# copilot.md "Resume"), so this adapter takes the helm with the full digest, as
+# Cursor does for a resumed session. A repeat is redundant and idempotent.
+#
 # In a linked crewmate worktree or a foreign checkout fm-sessionstart-run.sh
 # stands down silently and this adapter prints nothing.
 #
@@ -37,6 +44,7 @@ if [ -z "$SOURCE" ] && [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
   SOURCE=$(cat 2>/dev/null | jq -r '(.source // empty) | strings' 2>/dev/null || true)
 fi
 
+[ "$SOURCE" != resume ] || SOURCE=startup
 DIGEST=$(FM_COPILOT_HARNESS=copilot "$SCRIPT_DIR/fm-sessionstart-run.sh" --source "${SOURCE:-startup}" </dev/null 2>/dev/null || true)
 [ -n "$DIGEST" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0

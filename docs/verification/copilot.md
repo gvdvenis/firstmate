@@ -156,7 +156,7 @@ The registration holds one `sessionStart` entry running `bin/fm-sessionstart-cop
 - `source` was `new` for a fresh launch, `new` again after `/clear`, and `resume` (with the earlier session's id) for `copilot --continue`.
 - `/clear` first fires `sessionEnd` with `reason: user_exit` for the old session, then a `sessionStart` with a new session id at the next prompt.
 - The SDK type also lists `startup`; no real run sent it.
-- `--resume <id>` was not exercised.
+- `copilot --resume <id>` sent `source: resume` with the same session id (see "Resume" under the primary run below).
 - `/compact` fired `preCompact` (`trigger: manual`, `customInstructions`, `transcriptPath`) and no `sessionStart` afterwards.
 - Whether `preCompact` output can put text in front of the model was not tried, so compaction delivery is unverified and unregistered.
 - In a hand-opened session in a scratch primary checkout, a 12790-character digest returned as `additionalContext` reached the model: it quoted the digest's first and last lines.
@@ -278,7 +278,7 @@ Raw traces (`events.jsonl`, wake logs, digests) are kept under `data/copilot-pri
 | Pre-tool guards | `cd projects` denied by `persistent-cd`; the `task` tool denied by `subagent-dispatch` | the same two denials |
 | Turn-end guard | with a task record, no watcher, and a trivial prompt: one `turn-end-guard` block, the model reran `bin/fm-copilot-wake.sh start`, the next stop ended the turn | the same |
 | Typed wake from a real status line | status line at +0 s, queue row at +46 s (the watcher's own poll), doorbell typed (`verdict=empty`) at +47 s, queue empty after the model's `--ack-through` | queue row at +32 s, doorbell typed at +34 s, queue empty by +75 s |
-| Double Escape on a running `sleep` | `Operation cancelled by user`; the turn record stayed `busy`; a status line queued afterwards rang once the record was 120 s old (`FM_COPILOT_WAKE_INTERRUPT_GRACE` default) | `Operation cancelled by user`; the record stayed `busy`; the later ring is not isolated because a finished background shell from the first attempt started a turn |
+| Double Escape on a running `sleep` | `Operation cancelled by user`; the turn record stayed `busy`; a status line queued afterwards rang once the record was 120 s old (`FM_COPILOT_WAKE_INTERRUPT_GRACE` default) | `Operation cancelled by user`; the record stayed `busy`; the clean rerun with nothing in the background is below |
 | `/compact` | `session.compaction_complete`, no new `sessionStart`; asked, the model held no digest | the same |
 | `/exit` | the wake process logged `stopped: the pane agent is gone` and no firstmate process survived | the same; the pane returned to its shell with `Resume copilot --resume=<id>` |
 
@@ -291,15 +291,39 @@ Raw traces (`events.jsonl`, wake logs, digests) are kept under `data/copilot-pri
 
 The supervision host has no Copilot arm owner (a parked `agentStop` leaves the pane deaf, see Parked hooks), and the typed-wake process stands down once `state/.afk` exists, so `/afk` and `/quiet` use the away daemon, as they do for every primary the host does not run on.
 On tmux the model ran `bin/fm-afk-launch.sh enter` and `start`; the daemon launched in a detached tmux session supervising the pane. A `needs-decision` status line was escalated 1 s after the watcher signal, and a `FIRSTMATE_OP: v1 away-supervisor` prompt was typed into the pane and reached `userPromptSubmitted` with the U+2063 marker intact (bytes `e2 81 a3`), so Copilot keeps the invisible envelope and the daemon needs no record-backed doorbell. `bin/fm-afk-launch.sh stop` cleared the record and the daemon.
-On a Herdr pane the daemon's generic composer read classified the captured idle Copilot screen as `unknown` (the tmux capture read `empty`), which would have deferred every injection. The daemon now reads its supervisor pane's composer as Copilot when the primary is Copilot, and the same capture reads `empty`. The full daemon run was not repeated on Herdr.
+On a Herdr pane the daemon's generic composer read classified the captured idle Copilot screen as `unknown` (the tmux capture read `empty`), which would have deferred every injection. The daemon now reads its supervisor pane's composer as Copilot when the primary is Copilot, and the same capture reads `empty`. 
+On a Herdr pane (Copilot 1.0.109, Herdr 0.9.5, named lab session) the full daemon run worked.
+`bin/fm-afk-launch.sh enter --words ...` and `start` launched the daemon in a second workspace of the lab session, supervising the primary's pane.
+A `needs-decision` status line was signalled by the watcher 40 s after it was written (the watcher's poll), the daemon logged `escalate` 4 s later, and the `FIRSTMATE_OP: v1 away-supervisor` prompt reached the model about 90 s after that (the daemon's 90 s escalation batch window), with the U+2063 marker intact (bytes `e2 81 a3` at the start of the `user.message`) and no other text typed into the composer.
+`bin/fm-afk-launch.sh stop` cleared the record, archived the contract and closed the daemon workspace; it printed `terminal close command failed, but exact absence was confirmed`, and the lab session held only the primary's workspace afterwards.
+
+### Interrupted turn on Herdr
+
+With nothing running in the background, a foreground `sleep 280` was started at 13:37:22Z.
+A double Escape sent as one `herdr pane send-keys <pane> esc esc` printed `Operation cancelled by user` at 13:38:22Z; two separate `send-keys esc` calls a second apart cancelled nothing.
+A `needs-decision` status line written at 13:38:03Z queued a row at 13:38:42Z (the watcher's poll).
+The wake process logged `ring: typed the doorbell (verdict=empty, head=3)` at 13:39:25Z, which is 122 s after the turn began and 63 s after the cancel, matching `FM_COPILOT_WAKE_INTERRUPT_GRACE` (120 s) counted from the busy record.
+The typed doorbell started a turn (`userPromptSubmitted` at 13:39:24.9Z) and the model drained the queue.
+No ring was typed between the cancel and the grace expiry.
+
+### Resume
+
+`copilot --resume=<id>` (printed by `/exit` as `Resume copilot --resume=<id>`) was run in the same pane after `/exit` on Herdr and on tmux 3.7c, with the primary run's lab home.
+The wake process had logged `stopped: the pane agent is gone` and the lock file named a dead pid.
+The `sessionStart` payload was `{"source":"resume","initialPrompt":...,"sessionId":<the earlier id>,...}`, and it fired at the first prompt after the resume, not when the pane opened.
+Before the fix, the adapter routed `resume` to the nudge wrapper, which returned only the one-line `FIRSTMATE_OP: v1 session-start` instruction.
+On Herdr the resumed model followed the restored conversation instead (it ran `bin/fm-afk-return.sh` from the earlier away work), no digest ran, the lock stayed on the dead pid, and no wake process started.
+`bin/fm-sessionstart-copilot.sh` now takes the helm with the full digest on `resume`.
+After that change, on both backends: the `sessionStart` output was the whole digest (11117 characters on Herdr) with `lock acquired: harness pid <the new copilot pid>` and `Lock: held by this session`, and `bin/fm-copilot-wake.sh start` (run when the model was asked to) logged a new `started: target=<pane>` with a fresh watcher.
+The resumed model's replies kept the earlier conversation, so a resumed primary has both the old context and the new digest.
 
 ## Still not exercised
 
 - A host that keeps the Copilot token in `config.json` rather than the OS keyring.
 - The update restart (`bin/fm-secondmate-restart.sh`) on a live Copilot secondmate.
 - A keystroke landing between the composer check and the typed line, on either backend.
-- The away daemon on a Herdr Copilot primary, and the interrupted-turn ring on Herdr.
-- Output from `preCompact`, and `copilot --resume <id>`.
+- Output from `preCompact`.
+- An in-process `/resume` to another session, whose `source` was not recorded.
 - Any Copilot version other than 1.0.105 for the worker and secondmate runs and 1.0.109 for the primary run.
 
 ## Reusable guards
