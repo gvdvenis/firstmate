@@ -53,6 +53,14 @@ fm_hook_payload_is_foreign_host() {  # <payload>
 fm_hook_payload_is_copilot() {  # <payload>
   local payload=${1-}
   [ -n "$payload" ] || return 1
+  # Two payload-independent signals, so a changed or missing `timestamp` cannot
+  # re-enable the Claude auto-arm Stop hook (an 8-hour hold). Copilot sets
+  # COPILOT_HOOK_DEPTH for hooks only, never for its tool shells, and a hook's
+  # parent process is `copilot` itself (docs/verification/copilot.md).
+  case "${COPILOT_HOOK_DEPTH:-}" in ''|*[!0-9]*|0*) ;; *) return 0 ;; esac
+  # shellcheck source=bin/fm-cursor-lib.sh
+  [ -r "${BASH_SOURCE[0]%/*}/fm-cursor-lib.sh" ] && . "${BASH_SOURCE[0]%/*}/fm-cursor-lib.sh" \
+    && fm_copilot_args_are_copilot "$(ps -o args= -p "$PPID" 2>/dev/null)" "$PPID" && return 0
   command -v jq >/dev/null 2>&1 || return 1
   printf '%s' "$payload" | jq -e '
     type == "object"

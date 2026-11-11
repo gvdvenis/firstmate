@@ -41,6 +41,27 @@ test_predicate() {
   pass "predicate: Copilot payloads are foreign, Claude and malformed payloads run"
 }
 
+test_predicate_drift() {
+  local nots nostamp fakebin probe
+  nots=$(printf '%s' "$CP_STOP" | jq -c 'del(.timestamp)')
+  ! fm_hook_payload_is_foreign_host "$nots" || fail "control: a payload without timestamp must not match by payload alone"
+  COPILOT_HOOK_DEPTH=1 fm_hook_payload_is_foreign_host "$nots" || fail "COPILOT_HOOK_DEPTH=1 must identify Copilot without a timestamp"
+  COPILOT_HOOK_DEPTH=2 fm_hook_payload_is_foreign_host "$CL_STOP" || fail "COPILOT_HOOK_DEPTH=2 must identify Copilot"
+  for nostamp in 0 00 '' abc -1 1x; do
+    ! COPILOT_HOOK_DEPTH=$nostamp fm_hook_payload_is_foreign_host "$CL_STOP" || fail "COPILOT_HOOK_DEPTH='$nostamp' must not identify Copilot"
+  done
+  fakebin=$(fm_fakebin "$TMP_ROOT/fakebin-drift")
+  ln -s /bin/bash "$fakebin/copilot"
+  ln -s /bin/bash "$fakebin/claude"
+  # The hook runs one process below its parent; the trailing `:` keeps bash from exec-ing it away.
+  probe='. "$1/bin/fm-hook-host-lib.sh"; fm_hook_payload_is_foreign_host "$2"; echo $?'
+  [ "$("$fakebin/copilot" -c 'bash -c "$1" _ "$2" "$3"; :' _ "$probe" "$ROOT" "$nots")" = 0 ] \
+    || fail "a hook whose parent is copilot must be identified without a timestamp"
+  [ "$("$fakebin/claude" -c 'bash -c "$1" _ "$2" "$3"; :' _ "$probe" "$ROOT" "$CL_STOP")" = 1 ] \
+    || fail "a hook whose parent is claude must run"
+  pass "predicate: COPILOT_HOOK_DEPTH and a copilot parent identify Copilot despite a changed payload"
+}
+
 # A genuine primary checkout with this repo's bin and one task in flight.
 HOME_DIR="$TMP_ROOT/primary"
 mkdir -p "$HOME_DIR/state"
@@ -111,6 +132,7 @@ test_pretool_guards() {
 }
 
 test_predicate
+test_predicate_drift
 test_turnend_guard
 test_autoarm
 test_sessionstart

@@ -10,11 +10,12 @@
 # dialog never holds the -i prompt and no other directory is trusted. The
 # captain's real ~/.copilot is never written and its user-level hooks, plugins,
 # skills and MCP servers do not load (verified, copilot 1.0.105). Its
-# ${COPILOT_HOME:-$HOME/.copilot}/config.json is read for exactly three keys,
-# copilotTokens, loggedInUsers and lastLoggedInUser, carried into the task
-# config.json (mode 600, values never printed) so a host that keeps the login
-# in that file instead of the OS keyring still signs in; a missing or
-# unparsable source adds nothing.
+# ${COPILOT_HOME:-$HOME/.copilot}/config.json is read for exactly four keys,
+# authTokens (copilot 1.0.109), the older copilotTokens, loggedInUsers and
+# lastLoggedInUser, carried into the task config.json (mode 600, values never
+# printed) so a host that keeps the login in that file instead of the OS
+# keyring still signs in. Those keys are replaced on every seed, so a missing
+# or unparsable source adds nothing and clears an earlier copy.
 # The launch passes the plugin directory with --plugin-dir, which loads the
 # hooks once the working directory is trusted. A plugin is the
 # per-task hook channel because every other hook source is a user or project
@@ -81,7 +82,7 @@ base='{}'
 login='{}'
 source_config="${COPILOT_HOME:-$HOME/.copilot}/config.json"
 [ ! -s "$source_config" ] || login=$(grep -v '^[[:space:]]*//' "$source_config" \
-  | jq -c 'with_entries(select(.key | IN("copilotTokens", "loggedInUsers", "lastLoggedInUser")))' 2>/dev/null) || login='{}'
-printf '%s' "$base" | jq --arg wt "$WORKTREE" --argjson login "$login" '. + $login | .trustedFolders = [$wt]' > "$config.tmp"
+  | jq -c 'with_entries(select(.key | IN("authTokens", "copilotTokens", "loggedInUsers", "lastLoggedInUser")))' 2>/dev/null) || login='{}'
+printf '%s' "$base" | jq --arg wt "$WORKTREE" --argjson login "$login" 'del(.authTokens, .copilotTokens, .loggedInUsers, .lastLoggedInUser) + $login | .trustedFolders = [$wt]' > "$config.tmp"
 chmod 600 "$config.tmp"
 mv "$config.tmp" "$config"

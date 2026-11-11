@@ -55,7 +55,7 @@ set -u
 # Lowercase substrings that mark a tool name as delegation-shaped: it creates
 # work, an agent, a schedule, or an isolated workspace that firstmate would not
 # know about. This list is the single owner of the shipped classification.
-DELEGATION_STEMS='agent subagent task workflow cron schedul worktree delegate spawn dispatch handoff remote sendmessage monitor'
+DELEGATION_STEMS='agent subagent task workflow cron schedul worktree delegate spawn dispatch handoff remote sendmessage monitor createsession sendsessionmessage'
 
 # Exact lowercase tool names that match a stem above but only OBSERVE or STOP
 # work that already exists. Reading or ending unaccounted work is not creating
@@ -161,6 +161,8 @@ LC_ALL=C NORMALIZED=$(printf '%s' "$TOOL" | tr '[:upper:]' '[:lower:]' | tr -cd 
 # blocking it would be a false positive with no bearing on fleet dispatch.
 case "$TOOL" in
   mcp__*) exit 0 ;;
+  # Copilot names MCP tools `<server>-<tool>` instead (github-mcp-server-*).
+  github-mcp-server-*|githubiq-*) exit 0 ;;
 esac
 
 for allowed in $OBSERVE_ONLY_TOOLS $PLAN_ONLY_TOOLS; do

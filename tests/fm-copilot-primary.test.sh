@@ -41,7 +41,7 @@ install_scripts() {  # <dir>
            fm-subagent-pretool-check.sh fm-hook-host-lib.sh fm-primary-scope-lib.sh \
            fm-path-lib.sh fm-session-lock-lib.sh fm-operational-input.sh fm-harness.sh \
            fm-lock.sh fm-gate-refuse-lib.sh fm-timeout-lib.sh fm-supervision-lib.sh \
-           fm-wake-lib.sh fm-classify-lib.sh fm-afk-contract.sh fm-lease-lib.sh \
+           fm-busy-lib.sh fm-cursor-lib.sh fm-wake-lib.sh fm-classify-lib.sh fm-afk-contract.sh fm-lease-lib.sh \
            fm-supervision-engine-lib.sh fm-supervision-instructions.sh; do
     cp "$ROOT/bin/$f" "$dir/bin/$f"
   done
@@ -122,6 +122,50 @@ test_sessionstart_unrecognized_source_gets_the_full_digest() {
   out=$(run_registered "$dir" sessionStart 'not json')
   case "$out" in *'FIRSTMATE DIGEST'*) ;; *) fail "an unreadable payload must still take the helm: $out" ;; esac
   pass "fm-sessionstart-copilot: unrecognized or unreadable payloads get the full digest"
+}
+
+test_sessionstart_warns_outside_the_verified_version_range() {
+  local dir out fakebin v
+  dir=$(make_primary_dir "$TMP_ROOT/session-version")
+  fakebin=$(fm_fakebin "$TMP_ROOT/fakebin-version")
+  for v in 1.0.109 1.0.105; do
+    printf '#!/usr/bin/env bash\necho "GitHub Copilot CLI %s."\n' "$v" > "$fakebin/copilot"; chmod +x "$fakebin/copilot"
+    out=$(PATH="$fakebin:$PATH" run_registered "$dir" sessionStart "$(session_payload new)")
+    case "$out" in *'warning: copilot version'*) fail "a verified version $v must not warn: $out" ;; esac
+  done
+  for v in 1.0.110 1.1.0 ''; do
+    printf '#!/usr/bin/env bash\necho "GitHub Copilot CLI %s."\n' "$v" > "$fakebin/copilot"; chmod +x "$fakebin/copilot"
+    out=$(PATH="$fakebin:$PATH" run_registered "$dir" sessionStart "$(session_payload new)")
+    case "$(printf '%s' "$out" | jq -r '.additionalContext // empty')" in
+      *'FIRSTMATE DIGEST'*'warning: copilot version'*'outside the verified range'*) ;;
+      *) fail "version '$v' must add one warning line after the digest: $out" ;;
+    esac
+  done
+  printf '#!/usr/bin/env bash\nsleep 30\n' > "$fakebin/copilot"
+  out=$(PATH="$fakebin:$PATH" run_registered "$dir" sessionStart "$(session_payload new)")
+  case "$out" in *'copilot version unknown'*) ;; *) fail "a hung --version must be bounded and warn as unknown: $out" ;; esac
+  pass "fm-sessionstart-copilot: warns when copilot --version is outside the verified range"
+}
+
+test_launcher_gives_a_plain_terminal_a_tmux_pane() {
+  local d="$TMP_ROOT/launcher" fakebin out i
+  command -v tmux >/dev/null 2>&1 || { pass "fm-copilot-primary launcher: skipped, tmux not found"; return 0; }
+  mkdir -p "$d/tmux"
+  fakebin=$(fm_fakebin "$TMP_ROOT/fakebin-launcher")
+  printf '#!/usr/bin/env bash\nprintf "%%s|%%s|%%s\\n" "${TMUX_PANE:-none}" "$PWD" "$*" > "$LAUNCH_OUT"\nsleep 5\n' > "$fakebin/copilot"
+  chmod +x "$fakebin/copilot"
+  # Inside a pane it runs copilot in place with the arguments.
+  LAUNCH_OUT="$d/inplace" PATH="$fakebin:$PATH" TMUX_PANE=%9 FM_ROOT_OVERRIDE="$d" "$ROOT/bin/fm-copilot-primary.sh" --no-auto-update --allow-all >/dev/null 2>&1 &
+  for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$d/inplace" ] && break; sleep 0.3; done
+  [ "$(cat "$d/inplace" 2>/dev/null)" = "%9|$d|--no-auto-update --allow-all" ] || fail "in-pane launch must run copilot here with its arguments: $(cat "$d/inplace" 2>/dev/null)"
+  # From a plain terminal it opens a tmux pane, so TMUX_PANE is set for the wake.
+  env -u TMUX -u TMUX_PANE LAUNCH_OUT="$d/plain" PATH="$fakebin:$PATH" TMUX_TMPDIR="$d/tmux" FM_ROOT_OVERRIDE="$d" \
+    FM_COPILOT_PRIMARY_DETACH=1 "$ROOT/bin/fm-copilot-primary.sh" --no-auto-update >/dev/null 2>&1 || fail "plain-terminal launch failed"
+  for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$d/plain" ] && break; sleep 0.3; done
+  out=$(cat "$d/plain" 2>/dev/null)
+  case "$out" in %*"|$d|--no-auto-update") ;; *) fail "plain-terminal launch must run copilot in a tmux pane in the home: $out" ;; esac
+  env -u TMUX -u TMUX_PANE TMUX_TMPDIR="$d/tmux" tmux kill-server 2>/dev/null || true
+  pass "fm-copilot-primary launcher: runs in place inside a pane and opens a tmux pane from a plain terminal"
 }
 
 test_sessionstart_silent_in_a_worker_worktree() {
@@ -451,6 +495,8 @@ test_secondmate_home_busy_records_stay_apart() {
 test_sessionstart_emits_additional_context_for_a_new_session
 test_sessionstart_routes_the_payload_source
 test_sessionstart_unrecognized_source_gets_the_full_digest
+test_sessionstart_warns_outside_the_verified_version_range
+test_launcher_gives_a_plain_terminal_a_tmux_pane
 test_sessionstart_silent_in_a_worker_worktree
 test_pretool_denies_with_a_visible_reason
 test_pretool_exits_zero_on_deny

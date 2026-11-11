@@ -48,5 +48,17 @@ fi
 DIGEST=$(FM_COPILOT_HARNESS=copilot "$SCRIPT_DIR/fm-sessionstart-run.sh" --source "${SOURCE:-startup}" </dev/null 2>/dev/null || true)
 [ -n "$DIGEST" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
+# Only fm-spawn checked the Copilot version, so a hand-opened primary that
+# auto-updated outside the verified range got no warning (same bound as there).
+# shellcheck source=bin/fm-timeout-lib.sh
+. "$SCRIPT_DIR/fm-timeout-lib.sh"
+# shellcheck source=bin/fm-busy-lib.sh
+. "$SCRIPT_DIR/fm-busy-lib.sh"
+if COPILOT_BIN=$(command -v copilot 2>/dev/null); then
+  copilot_version=$(fm_run_timed 5 "$COPILOT_BIN" --version 2>/dev/null </dev/null | head -n 1 || true)
+  fm_copilot_version_verified "$copilot_version" \
+    || DIGEST="$DIGEST
+warning: copilot version ${copilot_version:-unknown} is outside the verified range 1.0.105-1.0.109; the composer, busy and interrupt reads may not match"
+fi
 jq -cn --arg c "$DIGEST" '{additionalContext:$c}' 2>/dev/null || true
 exit 0

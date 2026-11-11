@@ -45,11 +45,12 @@ A tool is delegation-shaped when its normalized lowercase name contains one of t
 ```text
 agent  subagent  task  workflow  cron  schedul  worktree
 delegate  spawn  dispatch  handoff  remote  sendmessage  monitor
+createsession  sendsessionmessage
 ```
 
 Three exclusions keep the shape test from producing false positives.
 
-- A name beginning `mcp__` is never classified.
+- A name beginning `mcp__`, or Copilot's `<server>-<tool>` form for the GitHub MCP server (`github-mcp-server-`, `githubiq-`), is never classified.
   An MCP server chooses its own tool names, a task or agent noun there is common, and it has no bearing on fleet dispatch.
 - `OBSERVE_ONLY_TOOLS`: the exact names `taskoutput`, `taskstop`, `taskget`, `tasklist`, `cronlist`, `bashoutput`, `killshell`, `manage_subagents` (`managesubagents`), `manage_task` (`managetask`), and Copilot's `read_agent` (`readagent`) and `list_agents` (`listagents`) are allowed.
   These observe or stop work that already exists rather than creating it, and denying them at this layer could strand already-running work with no way to inspect or end it.
