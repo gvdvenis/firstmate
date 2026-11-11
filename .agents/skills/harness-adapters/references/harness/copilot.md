@@ -38,7 +38,7 @@ A hand-opened primary session gets the session-start digest and the pre-tool sea
 The turn-end guard and the typed wake are verified on tmux and Herdr ([verification](../../../../../docs/verification/copilot.md#typed-wake)); `bin/fm-copilot-wake.sh` owns the wake.
 As this home's own primary, Copilot's session lock, digest, seatbelts, turn-end guard, typed wake, double-Escape interrupt, and exit were exercised live on both backends ([verification](../../../../../docs/verification/copilot.md#copilot-as-this-homes-primary)).
 `/afk` and `/quiet` on a Copilot primary run the away daemon, never the supervision host, which has no Copilot arm owner; the typed wake stands down while away mode runs.
-`/compact` drops the digest and fires no new session-start hook, so a compacted primary reruns `bin/fm-session-start.sh` itself, as the session-start section of `AGENTS.md` says.
+`/compact` fires no new session-start hook and a model does not rerun session start unprompted, so `bin/fm-copilot-compact.sh` re-emits the digest on the first prompt or tool call after any compaction ([verification](../../../../../docs/verification/copilot.md#compaction-re-emit)).
 
 ## Secondmate
 
