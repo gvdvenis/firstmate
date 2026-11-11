@@ -27,9 +27,18 @@
 #     (fm_busy_lines_match in bin/fm-composer-lib.sh);
 #   - the composer reads exactly `empty` (bin/fm-composer-lib.sh). A half-written
 #     operator line reads `pending` and an unrecognized screen, such as a picker,
-#     reads `unknown`; both wait. Terminal input has no compare-and-type, so a
-#     keystroke landing in the instant between this check and the typed line can
-#     still merge with it.
+#     reads `unknown`; both wait.
+# Terminal input has no compare-and-type, so the doorbell is typed and submitted
+# in one step guarded as late as the backend allows: on tmux the cursor read
+# before the composer check is re-tested inside the server just before the paste
+# (paste-buffer -p, then Enter, in one command list), on Herdr the composer is
+# re-read just before one `pane run`. A keystroke that lands before the guard
+# makes the ring refuse and leaves the draft alone. Measured with Copilot
+# 1.0.109 (docs/verification/copilot.md), the window in which a key still merges
+# with the doorbell fell from about 0.7 s to about 5-10 ms on tmux and 10-30 ms
+# on Herdr. What remains is Copilot's own echo time: a key already written to the
+# pane but not yet drawn, which no screen read can see. That merge is submitted
+# with the doorbell and cannot be closed from outside Copilot.
 #
 # The queue is the only delivery proof. A row stays until the session acknowledges
 # it with bin/fm-wake-drain.sh --ack-through, so a wake that waits, a doorbell
@@ -160,10 +169,28 @@ pane_idle() {
   return 1
 }
 
+# The last guard runs where the input lands. On tmux the paste and its Enter
+# run in one server command list that first checks the cursor still sits where
+# the empty-composer read saw it; on Herdr a fresh composer read precedes one
+# `pane run` that types and submits together.
+submit_guarded() {  # <text> <tmux-cursor>
+  case "$BACKEND" in
+    tmux) fm_backend_tmux_paste_submit_if_cursor "$TARGET" "$1" "$2" ;;
+    herdr)
+      fm_backend_herdr_target_ready "$TARGET" || return 1
+      [ "$(FM_COMPOSER_HARNESS=copilot fm_backend_composer_state herdr "$TARGET" 2>/dev/null)" = empty ] || return 1
+      fm_backend_herdr_cli "$FM_BACKEND_HERDR_SESSION" pane run "$FM_BACKEND_HERDR_PANE" "$1" >/dev/null 2>&1
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 # 0 iff the doorbell was typed, or its unsent copy was given Enter.
 ring_once() {
-  local composer doorbell verdict
+  local composer doorbell cursor=
   pane_idle || return 1
+  # Read before the composer, so a keystroke after this read moves the cursor.
+  [ "$BACKEND" != tmux ] || cursor=$(fm_backend_tmux_cursor "$TARGET" 2>/dev/null) || return 1
   composer=$(FM_COMPOSER_HARNESS=copilot fm_backend_composer_state "$BACKEND" "$TARGET" 2>/dev/null)
   case "$composer" in
     empty) ;;
@@ -177,10 +204,12 @@ ring_once() {
     *) return 1 ;;
   esac
   fm_operational_record_write "$STATE" watcher "$WAKE_BODY" doorbell || return 1
-  verdict=$(FM_COMPOSER_HARNESS=copilot fm_backend_send_text_submit "$BACKEND" "$TARGET" "$doorbell" 3 0.5 0.5 2>/dev/null)
-  [ "$verdict" != send-failed ] || return 1
+  if ! submit_guarded "$doorbell" "$cursor"; then
+    log 'ring: the composer changed before the doorbell landed'
+    return 1
+  fi
   LAST_LINE=$doorbell
-  log "ring: typed the doorbell (verdict=${verdict:-none}, head=$RING_HEAD)"
+  log "ring: typed the doorbell (head=$RING_HEAD)"
 }
 
 ring_tick() {
