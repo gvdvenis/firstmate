@@ -234,6 +234,16 @@ fm_busy_pi_stream_version_supported() {
   [ "${1:-}" = 1.2.0 ]
 }
 
+# 0 iff the `copilot --version` text names a release inside the range verified
+# live (1.0.105 through 1.0.109, docs/verification/copilot.md); spawn warns, never
+# refuses, outside it.
+fm_copilot_version_verified() {  # <copilot --version text>
+  local v
+  v=$(printf '%s\n' "${1:-}" | grep -oE '(^|[^0-9.])1\.0\.[0-9]+' | grep -oE '1\.0\.[0-9]+' | head -n 1)
+  [ -n "$v" ] || return 1
+  [ "${v##*.}" -ge 105 ] && [ "${v##*.}" -le 109 ]
+}
+
 fm_busy_stream_seconds() {  # <configured seconds>; off/invalid prints 0
   local value=${1:-}
   case "$value" in ''|*[!0-9]*) printf '0'; return ;; esac

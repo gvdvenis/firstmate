@@ -293,6 +293,27 @@ The supervision host has no Copilot arm owner (a parked `agentStop` leaves the p
 On tmux the model ran `bin/fm-afk-launch.sh enter` and `start`; the daemon launched in a detached tmux session supervising the pane. A `needs-decision` status line was escalated 1 s after the watcher signal, and a `FIRSTMATE_OP: v1 away-supervisor` prompt was typed into the pane and reached `userPromptSubmitted` with the U+2063 marker intact (bytes `e2 81 a3`), so Copilot keeps the invisible envelope and the daemon needs no record-backed doorbell. `bin/fm-afk-launch.sh stop` cleared the record and the daemon.
 On a Herdr pane the daemon's generic composer read classified the captured idle Copilot screen as `unknown` (the tmux capture read `empty`), which would have deferred every injection. The daemon now reads its supervisor pane's composer as Copilot when the primary is Copilot, and the same capture reads `empty`. The full daemon run was not repeated on Herdr.
 
+## Copilot 1.0.109 output reads
+
+On 2026-11-11, Copilot 1.0.109 (model `claude-haiku-4.5`, `--allow-all`) ran in a real tmux 3.7c pane (150 columns, private socket) with a relocated `COPILOT_HOME` that trusted only a scratch directory, to check the output firstmate scrapes against the 1.0.105 evidence above.
+The pane tails are pinned in `tests/captures/copilot-1.0.109-tmux` and asserted by `tests/fm-copilot-harness.test.sh`.
+
+| Read | 1.0.105 | 1.0.109 | Matching |
+| --- | --- | --- | --- |
+| Busy footer | `Working esc esc interrupt` | `Working · <n> B ctrl+c interrupt` | `FM_DELIVERY_COPILOT_BUSY_REGEX_DEFAULT` carries both alternatives, so no change |
+| Footer after one Escape on a running turn | `esc again to interrupt` | `Working · <n> B esc again to interrupt` | `again to interrupt` (`fm_control_interrupt_arm_signal`), so no change |
+| Footer after the second Escape | `Operation cancelled by user` | `Operation cancelled by user`, the tool row `Operation aborted by user`, composer a bare `❯` | nothing in `bin/` matches this line |
+| Idle composer, empty and with a draft | `❯` between `─` rules, `❯ text` | the same shapes | no change |
+| Idle double Escape | `Rewind to a previous point` picker | the same picker with `↑↓ Navigate · Enter Select · Esc Cancel`, read `unknown` | no change |
+| `/exit` | usage summary and `Resume copilot --resume=<id>` after a session with turns | the pane returned to its shell; a session with no turn printed no Resume line | nothing in `bin/` matches the Resume line |
+
+- The first-Escape footer was captured 0.1 s after the key, the same gap as `fm_control_interrupt_press_gap`.
+- Only the 1.0.109 busy and armed footers differ from 1.0.105 in anything matched; both versions are pinned by tests.
+- `fm-spawn.sh` prints `warning: copilot version <v> is outside the verified range 1.0.105-1.0.109` to stderr for any other `copilot --version` and still launches (`fm_copilot_version_verified` in `bin/fm-busy-lib.sh`), following the Pi stream-version warning.
+  A primary opened by hand never goes through `fm-spawn.sh`, so it gets no warning.
+
+On the same date the Copilot, daemon, harness-precedence, afk-launch and secondmate-liveness suites passed under `bin/fm-test-run.sh` with the tmux binary first on `PATH`; `tests/fm-copilot-signals-live-e2e.test.sh` capability-skipped without its opt-in.
+
 ## Still not exercised
 
 - A host that keeps the Copilot token in `config.json` rather than the OS keyring.
@@ -300,7 +321,7 @@ On a Herdr pane the daemon's generic composer read classified the captured idle 
 - A keystroke landing between the composer check and the typed line, on either backend.
 - The away daemon on a Herdr Copilot primary, and the interrupted-turn ring on Herdr.
 - Output from `preCompact`, and `copilot --resume <id>`.
-- Any Copilot version other than 1.0.105 for the worker and secondmate runs and 1.0.109 for the primary run.
+- Any Copilot version other than 1.0.105 and 1.0.109 (see "Copilot 1.0.109 output reads"), and a full worker or secondmate run on 1.0.109.
 
 ## Reusable guards
 
