@@ -327,7 +327,6 @@ test_secondmate_home_runs_all_three_adapters() {
   case "$out" in *'FIRSTMATE DIGEST'*) ;; *) fail "a secondmate home must get the digest: $out" ;; esac
   [ -s "$mate/state/digest-args" ] || fail "the digest did not run inside the secondmate home"
   [ ! -s "$base/state/digest-args" ] || fail "the secondmate's digest ran against the parent's home"
-X
   : > "$mate/state/task1.meta"
   out=$(run_registered "$mate" agentStop "$(stop_payload)")
   printf '%s' "$out" | jq -e '.decision == "block"' >/dev/null 2>&1 || fail "a secondmate with work in flight and no watcher must be blocked once: $out"

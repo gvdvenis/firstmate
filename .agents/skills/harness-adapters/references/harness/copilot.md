@@ -1,9 +1,8 @@
 # GitHub Copilot CLI
 
-Copilot is a spawned crewmate, scout, and persistent secondmate TUI adapter on tmux and Herdr only.
+Copilot is a spawned crewmate, scout, and persistent secondmate TUI adapter, and a hand-opened primary, on tmux and Herdr only.
 Every other runtime backend is refused.
-Adopting Copilot as this home's own primary is not part of that verification.
-A real Herdr pane and a real tmux pane have each run it with Copilot CLI 1.0.105 on 2026-11-05.
+A real Herdr pane and a real tmux pane have each run it with Copilot CLI 1.0.105 on 2026-11-05, and as a primary with 1.0.109 on 2026-11-11.
 Launch, interrupt, exit, relaunch, and teardown were exercised on both tmux and Herdr.
 [Copilot verification](../../../../../docs/verification/copilot.md) owns dated vendor evidence and what the backends have not yet exercised.
 
@@ -36,7 +35,10 @@ Early provider or build errors can leave the spawn-owned busy record open when `
 Typing while a turn runs queues the line (`Queued (1)`) rather than failing, so a draft is detectable but an in-flight steer is not refused.
 A subagent fires its own `userPromptSubmitted` and `agentStop` with `parentAgentId` in the payload, so the plugin hooks skip any payload carrying it and only the main agent's events open and close the turn.
 A hand-opened primary session gets the session-start digest and the pre-tool seatbelts from the tracked `.github/hooks/firstmate-primary.json` ([verification](../../../../../docs/verification/copilot.md#native-primary-hooks)); a worker on a Firstmate worktree loads that file too and both adapters stand down by primary scope.
-The turn-end guard and the typed wake are verified on tmux ([verification](../../../../../docs/verification/copilot.md#typed-wake)); `bin/fm-copilot-wake.sh` owns the wake.
+The turn-end guard and the typed wake are verified on tmux and Herdr ([verification](../../../../../docs/verification/copilot.md#typed-wake)); `bin/fm-copilot-wake.sh` owns the wake.
+As this home's own primary, Copilot's session lock, digest, seatbelts, turn-end guard, typed wake, double-Escape interrupt, and exit were exercised live on both backends ([verification](../../../../../docs/verification/copilot.md#copilot-as-this-homes-primary)).
+`/afk` and `/quiet` on a Copilot primary run the away daemon, never the supervision host, which has no Copilot arm owner; the typed wake stands down while away mode runs.
+`/compact` drops the digest and fires no new session-start hook, so a compacted primary reruns `bin/fm-session-start.sh` itself, as the session-start section of `AGENTS.md` says.
 
 ## Secondmate
 
