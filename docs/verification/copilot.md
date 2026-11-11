@@ -372,7 +372,7 @@ Measured on copilot 1.0.109 on tmux:
 - Unprompted after `/compact`, 0 of 4 scout trials reran session start; with the transport the model drained the right home and restarted supervision.
 
 Portable regression: `tests/fm-copilot-primary.test.sh`.
-Live check: see the dated run below.
+Live check, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone of the branch, lab `FM_HOME`, relocated `COPILOT_HOME` trusting only the clone, scrubbed environment, Claude Haiku 4.5): a first prompt received the startup digest through `sessionStart`; `/compact` ran; the next prompt carried the re-emit once (`userPromptSubmitted` hook output of 8455 bytes, and the model quoted its first line, "This session already took the helm at its own startup and has only lost its context."); the prompt after that carried none (hook output 4 bytes, `transformedContent` without the re-emit).
 
 ## Still not exercised
 
