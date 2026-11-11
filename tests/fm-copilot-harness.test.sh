@@ -112,6 +112,28 @@ for locale_name in C C.UTF-8; do
   done
   [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$tcap/idle-draft.pane")")" = pending ] || fail "real tmux draft not preserved under LC_ALL=$locale_name"
 done
+# Real captures from a live tmux pane on Copilot 1.0.109 (tests/captures/copilot-1.0.109-tmux):
+# the composer shape is unchanged, the busy footer reads `Working · <n> B ctrl+c interrupt`
+# (1.0.105 read `esc esc interrupt`), and both footers must keep reading busy.
+ncap="$ROOT/tests/captures/copilot-1.0.109-tmux"
+for locale_name in C C.UTF-8; do
+  for pane in idle busy-empty interrupt-armed after-interrupt; do
+    [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$ncap/$pane.pane")")" = empty ] || fail "1.0.109 $pane composer not empty under LC_ALL=$locale_name"
+  done
+  [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$ncap/idle-draft.pane")")" = pending ] || fail "1.0.109 draft not preserved under LC_ALL=$locale_name"
+  [ "$(LC_ALL=$locale_name fm_composer_classify_screen "$caps" "$(cat "$ncap/rewind-picker.pane")")" = unknown ] || fail "1.0.109 rewind picker read as a composer under LC_ALL=$locale_name"
+done
+for pane in busy-empty interrupt-armed; do
+  fm_busy_lines_match copilot < "$ncap/$pane.pane" || fail "1.0.109 $pane footer not read busy"
+done
+for pane in idle after-interrupt idle-draft; do
+  ! fm_busy_lines_match copilot < "$ncap/$pane.pane" || fail "1.0.109 $pane read busy"
+done
+for pane in "$tcap/busy-empty.pane" "$cap/busy-empty.pane"; do
+  fm_busy_lines_match copilot < "$pane" || fail "1.0.105 busy footer lost: $pane"
+done
+grep -Eq "$(fm_control_interrupt_arm_signal copilot)" "$ncap/interrupt-armed.pane" || fail '1.0.109 armed footer not recognized'
+grep -Eq "$(fm_control_interrupt_hazard_signal copilot)" "$ncap/rewind-picker.pane" || fail '1.0.109 rewind picker hazard not recognized'
 # A byte-based awk (mawk, or LC_ALL=C) must still match a normal-width rule.
 export FM_COMPOSER_HARNESS=copilot
 for awk_locale in C C.UTF-8; do
@@ -191,6 +213,14 @@ printf '// managed\n{"trustedFolders":["/elsewhere"],"firstLaunchAt":"x"}\n' > "
 jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.firstLaunchAt == "x" and .trustedFolders == [$wt]' "$cop_home/config.json" >/dev/null || fail 'reseed lost keys or kept a stale trust entry'
 pass "private plugin, trusted home, lifecycle and stale-generation rejection"
 
+for v in 'GitHub Copilot CLI 1.0.105.' 'GitHub Copilot CLI 1.0.109.'; do
+  fm_copilot_version_verified "$v" || fail "verified version warned: $v"
+done
+for v in '' 'garbage' 'GitHub Copilot CLI 1.0.104.' 'GitHub Copilot CLI 1.0.110.' 'GitHub Copilot CLI 1.0.1099.' 'GitHub Copilot CLI 1.1.105.' 'GitHub Copilot CLI 2.0.105.'; do
+  ! fm_copilot_version_verified "$v" || fail "unverified version accepted: $v"
+done
+pass "verified Copilot version range"
+
 case_dir="$TMP_ROOT/spawn"
 fakebin=$(make_spawn_fakebin "$case_dir/fake" claude)
 fm_fake_exit0 "$fakebin" copilot
@@ -202,6 +232,7 @@ fm_git_worktree "$proj" "$wt" copilot-test
 fm_test_spawn_brief "$home" copilot-worker
 if ! out=$(FM_FAKE_LAUNCH_LOG="$case_dir/launch" fm_test_run_spawn "$home" "$wt" "$fakebin" copilot-worker "$proj" --scout --harness copilot --model claude-sonnet-5.5 --effort xhigh 2>&1)
 then fail "spawn failed: $out"; fi
+assert_contains "$out" 'copilot version unknown is outside the verified range' 'unverified version not warned'
 launch=$(cat "$case_dir/launch")
 assert_contains "$launch" '--allow-all' 'autonomy flag missing'
 assert_contains "$launch" "COPILOT_HOME='$home/state/copilot-worker.copilot-home'" 'per-task Copilot home missing'
