@@ -72,7 +72,8 @@ rule=$(printf '─%.0s' $(seq 1 60))
 draw() {
   printf '\033[2J\033[H'
   case "$(cat "$dir/mode")" in
-    box) printf '  <worktree>\n%s\n❯ %s\n%s\n%s\n' "$rule" "$buf" "$rule" "$(cat "$dir/footer")" ;;
+    # The cursor rests at the end of the composer line, as in Copilot, so a typed key moves it.
+    box) printf '  <worktree>\n%s\n❯ %s\n%s\n%s\033[3;%dH' "$rule" "$buf" "$rule" "$(cat "$dir/footer")" "$((3 + ${#buf}))" ;;
     *) printf 'Pick something\n  1. one\n  2. two\n' ;;
   esac
 }
