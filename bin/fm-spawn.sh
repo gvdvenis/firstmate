@@ -3133,8 +3133,9 @@ launch_template() {
   # directory, and answering the dialog is not unattended (declining exits the
   # agent), so COPILOT_HOME is relocated onto a firstmate-owned per-task home
   # whose config.json trusts exactly this worktree (bin/fm-copilot-plugin.sh);
-  # the captain's ~/.copilot stays untouched and login still works because the
-  # credential lives in the OS keyring keyed by account, not in that directory.
+  # the captain's ~/.copilot is never written; login still works because the
+  # credential is in the OS keyring (keyed by account) or, for a config.json login,
+  # carried over by that script (copilotTokens, loggedInUsers, lastLoggedInUser).
   # Trusting the worktree still loads its own project hooks, skills and MCP
   # servers; no setting found suppresses that. --no-ask-user removes the ask_user
   # tool, so an unattended worker decides alone instead of holding on a question
@@ -3409,6 +3410,9 @@ copilot)
     echo "error: copilot executable not found on PATH; install GitHub Copilot CLI or select a different verified harness" >&2
     exit 1
   }
+  copilot_version=$(fm_run_timed 5 "$COPILOT_BIN" --version 2>/dev/null </dev/null | head -n 1 || true)
+  fm_copilot_version_verified "$copilot_version" \
+    || echo "warning: copilot version ${copilot_version:-unknown} is outside the verified range 1.0.105-1.0.109; the composer, busy and interrupt reads may not match" >&2
   ;;
 pi | pi-signed)
   PI_BIN=$(resolve_pi_executable "$HARNESS") || {
