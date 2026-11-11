@@ -35,7 +35,7 @@ SUB_MEMBERS=',"agentId":"a1","agentType":"task","parentAgentId":"00000000-0000-4
 install_scripts() {  # <dir>
   local dir=$1 f
   mkdir -p "$dir/bin" "$dir/docs" "$dir/.github/hooks"
-  for f in fm-sessionstart-copilot.sh fm-pretool-copilot.sh fm-turnend-guard-copilot.sh \
+  for f in fm-sessionstart-copilot.sh fm-pretool-copilot.sh fm-turnend-guard-copilot.sh fm-copilot-compact.sh \
            fm-turnend-guard.sh fm-copilot-wake.sh fm-sessionstart-run.sh \
            fm-sessionstart-nudge.sh fm-arm-pretool-check.sh fm-cd-pretool-check.sh \
            fm-subagent-pretool-check.sh fm-hook-host-lib.sh fm-primary-scope-lib.sh \
@@ -80,7 +80,7 @@ make_worker_dir() {
 
 # registered_command <event>: the command string Copilot would run for <event>.
 registered_command() {
-  jq -r --arg e "$1" '.hooks[$e][0].bash' "$REGISTRATION"
+  jq -r --arg e "$1" '.hooks[$e][-1].bash' "$REGISTRATION"
 }
 
 # run_registered <dir> <event> <payload>: run the tracked registration's own
@@ -265,6 +265,108 @@ test_turnend_inert_in_a_worker_worktree() {
   pass "fm-turnend-guard-copilot: stands down in a linked worker worktree"
 }
 
+# --- compaction re-emit ----------------------------------------------------------
+
+prompt_payload() {  # [extra json members, leading comma]
+  printf '{"sessionId":"%s","timestamp":%s,"cwd":"/work/p","prompt":"hi"%s}' "$SID" "$TS" "${1:-}"
+}
+compact_payload() {  # [extra json members, leading comma]
+  printf '{"sessionId":"%s","timestamp":%s,"cwd":"/work/p","trigger":"manual","customInstructions":""%s}' "$SID" "$TS" "${1:-}"
+}
+DIGEST_MARK='FIRSTMATE DIGEST "quoted" line'
+
+test_compact_marker_then_first_prompt_injects_once() {
+  local dir out
+  dir=$(make_primary_dir "$TMP_ROOT/compact-once")
+  out=$(run_registered "$dir" preCompact "$(compact_payload)")
+  [ -z "$out" ] || fail "preCompact output is discarded by Copilot, so the hook must print nothing: $out"
+  [ -e "$dir/state/.copilot-compacted" ] || fail "preCompact must leave a marker"
+  out=$(run_registered "$dir" userPromptSubmitted "$(prompt_payload)")
+  printf '%s' "$out" | jq -e 'keys == ["additionalContext"]' >/dev/null 2>&1 || fail "the first prompt after a compaction must get exactly one additionalContext: $out"
+  case "$(printf '%s' "$out" | jq -r .additionalContext)" in *"$DIGEST_MARK"*) ;; *) fail "the re-emit must carry the digest: $out" ;; esac
+  grep -q -- '--source compact' "$dir/state/digest-args" 2>/dev/null || [ -s "$dir/state/digest-args" ] || fail "the run wrapper was not reached"
+  [ ! -e "$dir/state/.copilot-compacted" ] || fail "delivery must clear the marker"
+  out=$(run_registered "$dir" userPromptSubmitted "$(prompt_payload)")
+  [ -z "$out" ] || fail "the second prompt must inject nothing: $out"
+  out=$(run_registered "$dir" postToolUse "$(tool_payload bash '{"command":"ls"}')")
+  [ -z "$out" ] || fail "a tool call after delivery must inject nothing: $out"
+  pass "fm-copilot-compact: a marker set by preCompact injects the digest on the first prompt, once"
+}
+
+test_compact_marker_delivers_on_a_mid_turn_tool_call() {
+  local dir out
+  dir=$(make_primary_dir "$TMP_ROOT/compact-tool")
+  run_registered "$dir" preCompact "$(compact_payload)" >/dev/null
+  out=$(run_registered "$dir" postToolUse "$(tool_payload bash '{"command":"ls"}')")
+  case "$(printf '%s' "$out" | jq -r '.additionalContext // empty' 2>/dev/null)" in *"$DIGEST_MARK"*) ;; *) fail "an automatic mid-turn compaction must deliver on the next tool result: $out" ;; esac
+  out=$(run_registered "$dir" userPromptSubmitted "$(prompt_payload)")
+  [ -z "$out" ] || fail "the prompt after a tool delivery must inject nothing: $out"
+  pass "fm-copilot-compact: postToolUse delivers a mid-turn compaction once"
+}
+
+test_compact_without_a_marker_injects_nothing() {
+  local dir out
+  dir=$(make_primary_dir "$TMP_ROOT/compact-none")
+  out=$(run_registered "$dir" userPromptSubmitted "$(prompt_payload)")
+  [ -z "$out" ] || fail "no compaction, no injection: $out"
+  [ ! -s "$dir/state/digest-args" ] || fail "the digest ran without a compaction"
+  pass "fm-copilot-compact: no marker, no injection"
+}
+
+test_compact_marker_for_another_session_is_left_alone() {
+  local dir out
+  dir=$(make_primary_dir "$TMP_ROOT/compact-other")
+  run_registered "$dir" preCompact "$(compact_payload)" >/dev/null
+  out=$(run_registered "$dir" userPromptSubmitted "$(prompt_payload | jq -c '.sessionId="00000000-0000-4000-8000-0000000000ff"')")
+  [ -z "$out" ] || fail "another session must not claim this session's marker: $out"
+  [ -e "$dir/state/.copilot-compacted" ] || fail "the marker was consumed by another session"
+  pass "fm-copilot-compact: a session id mismatch neither injects nor consumes the marker"
+}
+
+test_compact_skips_subagent_and_malformed_payloads() {
+  local dir out p
+  dir=$(make_primary_dir "$TMP_ROOT/compact-skip")
+  run_registered "$dir" preCompact "$(compact_payload "$SUB_MEMBERS")" >/dev/null
+  [ ! -e "$dir/state/.copilot-compacted" ] || fail "a subagent's own compaction must not mark the primary"
+  run_registered "$dir" preCompact "$(compact_payload)" >/dev/null
+  out=$(run_registered "$dir" userPromptSubmitted "$(prompt_payload "$SUB_MEMBERS")")
+  [ -z "$out" ] || fail "a subagent must never receive the digest: $out"
+  out=$(run_registered "$dir" postToolUse "$(tool_payload bash '{}' "$SUB_MEMBERS")")
+  [ -z "$out" ] || fail "a subagent tool call must never receive the digest: $out"
+  [ -e "$dir/state/.copilot-compacted" ] || fail "a subagent payload consumed the marker"
+  for p in '' 'not json' '[]' '{}' '{"sessionId":7}'; do
+    out=$(run_registered "$dir" userPromptSubmitted "$p")
+    [ -z "$out" ] || fail "malformed input must inject nothing, got: $p -> $out"
+  done
+  [ -e "$dir/state/.copilot-compacted" ] || fail "malformed input consumed the marker"
+  pass "fm-copilot-compact: subagent-raised and malformed payloads inject nothing and keep the marker"
+}
+
+test_compact_inert_in_a_worker_worktree() {
+  local base child out
+  base=$(make_primary_dir "$TMP_ROOT/compact-base")
+  child="$TMP_ROOT/compact-worker"
+  make_worker_dir "$base" "$child"
+  run_registered "$child" preCompact "$(compact_payload)" >/dev/null
+  [ ! -e "$child/state/.copilot-compacted" ] || fail "a worker worktree must not record a compaction"
+  printf '%s\n' "$SID" > "$child/state/.copilot-compacted"
+  out=$(run_registered "$child" userPromptSubmitted "$(prompt_payload)")
+  [ -z "$out" ] || fail "a worker worktree must never receive the digest: $out"
+  out=$(run_registered "$child" postToolUse "$(tool_payload bash '{}')")
+  [ -z "$out" ] || fail "a worker worktree must never receive the digest on a tool call: $out"
+  pass "fm-copilot-compact: stands down in a linked worker worktree"
+}
+
+test_compact_registration_commands() {
+  [ "$(registered_command preCompact)" = '"$COPILOT_PROJECT_DIR"/bin/fm-copilot-compact.sh mark' ] || fail "preCompact must run the mark mode"
+  [ "$(registered_command postToolUse)" = '"$COPILOT_PROJECT_DIR"/bin/fm-copilot-compact.sh deliver' ] || fail "postToolUse must run the deliver mode"
+  jq -e '.hooks.userPromptSubmitted[-1].bash == "\"$COPILOT_PROJECT_DIR\"/bin/fm-copilot-compact.sh deliver"' "$REGISTRATION" >/dev/null \
+    || fail "the delivery entry must be registered last on userPromptSubmitted, because only the last additionalContext reaches the model"
+  jq -e '[.hooks.userPromptSubmitted[-1], .hooks.postToolUse[0]] | all(.timeoutSec > 120)' "$REGISTRATION" >/dev/null \
+    || fail "delivery runs the digest, so its timeout must sit above the 120s digest budget"
+  pass "copilot registration: preCompact marks, userPromptSubmitted (last) and postToolUse deliver"
+}
+
 # --- session lock ----------------------------------------------------------------
 
 test_session_lock_recognizes_copilot() {
@@ -283,7 +385,7 @@ test_session_lock_recognizes_copilot() {
 
 test_registration_covers_the_primary_events() {
   [ -f "$REGISTRATION" ] || fail "firstmate must ship a tracked project-scope .github/hooks/firstmate-primary.json"
-  jq -e '.version == 1 and (.hooks | keys == ["agentStop","preToolUse","sessionEnd","sessionStart","userPromptSubmitted"])' "$REGISTRATION" >/dev/null 2>&1 \
+  jq -e '.version == 1 and (.hooks | keys == ["agentStop","postToolUse","preCompact","preToolUse","sessionEnd","sessionStart","userPromptSubmitted"])' "$REGISTRATION" >/dev/null 2>&1 \
     || fail "the registration must cover exactly the session, tool, and turn boundary events"
   jq -e '.hooks.sessionStart[0].timeoutSec > 120' "$REGISTRATION" >/dev/null 2>&1 \
     || fail "the session-open timeout must sit above bin/fm-session-start.sh's own 120s budget"
@@ -365,3 +467,10 @@ test_registration_covers_the_primary_events
 test_worker_plugin_does_not_carry_the_primary_hooks
 test_secondmate_home_runs_all_three_adapters
 test_secondmate_home_busy_records_stay_apart
+test_compact_marker_then_first_prompt_injects_once
+test_compact_marker_delivers_on_a_mid_turn_tool_call
+test_compact_without_a_marker_injects_nothing
+test_compact_marker_for_another_session_is_left_alone
+test_compact_skips_subagent_and_malformed_payloads
+test_compact_inert_in_a_worker_worktree
+test_compact_registration_commands

@@ -159,7 +159,7 @@ The registration holds one `sessionStart` entry running `bin/fm-sessionstart-cop
 - The SDK type also lists `startup`; no real run sent it.
 - `copilot --resume <id>` sent `source: resume` with the same session id (see "Resume" under the primary run below).
 - `/compact` fired `preCompact` (`trigger: manual`, `customInstructions`, `transcriptPath`) and no `sessionStart` afterwards.
-- Whether `preCompact` output can put text in front of the model was not tried, so compaction delivery is unverified and unregistered.
+- `preCompact` output never reaches the model, so compaction is delivered through the two-step transport in [Compaction re-emit](#compaction-re-emit).
 - In a hand-opened session in a scratch primary checkout, a 12790-character digest returned as `additionalContext` reached the model: it quoted the digest's first and last lines.
 - Subagent sessions raised no `sessionStart`.
 
@@ -284,7 +284,7 @@ Raw traces (`events.jsonl`, wake logs, digests) are kept under `data/copilot-pri
 | `/exit` | the wake process logged `stopped: the pane agent is gone` and no firstmate process survived | the same; the pane returned to its shell with `Resume copilot --resume=<id>` |
 
 - An unacknowledged row was typed again after the 60 s re-ring grace on Herdr (rows at 11:59:58Z and 12:00:58Z), and the doorbell was never typed into a draft or a running turn.
-- After `/compact` the digest is gone and nothing re-sends it. When asked what its project instructions say to do at session start, the model on tmux ran `bin/fm-session-start.sh` and printed the digest again, so a compacted primary recovers by the session-start section of `AGENTS.md`, not by a hook. No compaction transport was built, and whether `preCompact` output can inject context is still unmeasured.
+- After `/compact` the digest is gone. Asked what its project instructions say to do at session start, the model on tmux reran `bin/fm-session-start.sh`, but unprompted none of 4 scout trials did, so `bin/fm-copilot-compact.sh` re-emits it ([Compaction re-emit](#compaction-re-emit)).
 - Copilot 1.0.109 draws `Working · <n> B ctrl+c interrupt` while a turn runs. The wake read it correctly: no doorbell was typed into a running turn.
 - A first tmux attempt inherited the parent's Herdr variables, so `fm-copilot-wake.sh start` resolved a pane of the default Herdr session; it stood down within 8 s with an empty queue and typed nothing. The lab was rebuilt with a scrubbed environment and a real `tmux` binary first on `PATH`. A hand-opened primary needs its own multiplexer's variables only.
 
@@ -359,13 +359,28 @@ Terminal input has no compare-and-type, so a key typed between the composer read
 - Not built on purpose: removing only the typed doorbell from the composer after a merge takes about 2 s and races with further typing.
 - If Copilot stops enabling bracketed paste, the Enter is swallowed and the doorbell stays unsent; the existing pending path then sends Enter only.
 
+## Compaction re-emit
+
+`bin/fm-copilot-compact.sh` (`mark` on `preCompact`, `deliver` on `userPromptSubmitted` and `postToolUse`) restores the digest after a compaction ([owner](../sessionstart-nudge.md#copilot-compaction)).
+Measured on copilot 1.0.109 on tmux:
+
+- `preCompact` output is discarded: six canary fields printed at once (`additionalContext`, `systemMessage`, `message`, `reason`, `hookSpecificOutput.additionalContext`, `customInstructions`) reached neither the summarizer nor the model, and the CLI's event log records no `output` for that hook.
+- `additionalContext` from `userPromptSubmitted` and from `postToolUse` reaches the model as a `<system_reminder>` appended to the prompt or tool result, and stays in history until the next compaction.
+- `preCompact` fires for manual (`trigger: manual`) and automatic (`trigger: auto`) compaction and carries `sessionId`; both delivery events carry the same `sessionId`.
+- A re-emit of about 8 KB was delivered; 200 KB was delivered intact; the hook layer drops an aggregate between 4 MiB and 16 MiB, far above the digest.
+- With two `userPromptSubmitted` entries returning `additionalContext`, only the last non-empty one reaches the model, so the delivery entry is registered last.
+- Unprompted after `/compact`, 0 of 4 scout trials reran session start; with the transport the model drained the right home and restarted supervision.
+
+Portable regression: `tests/fm-copilot-primary.test.sh`.
+Live check: see the dated run below.
+
 ## Still not exercised
 
 - A live host that keeps the Copilot token in `config.json` rather than the OS keyring (the copy is only pinned with fake values).
 - The update restart (`bin/fm-secondmate-restart.sh`) on a live Copilot secondmate.
 - A real attached client's typing, IME input, and a slash or `@` popup opening in the keystroke window; keys were injected through the multiplexer.
-- Output from `preCompact`.
 - An in-process `/resume` to another session, whose `source` was not recorded.
+- `copilot --resume <id>`, and a natural automatic compaction during a long real turn.
 - Any Copilot version other than 1.0.105 and 1.0.109 (see "Copilot 1.0.109 output reads"), and a full worker or secondmate run on 1.0.109.
 
 ## Reusable guards
