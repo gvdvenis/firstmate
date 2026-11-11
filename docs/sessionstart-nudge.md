@@ -410,6 +410,7 @@ Copilot compaction is uncovered and has no tracked transport.
 `/compact` fires only `preCompact` and no `sessionStart` afterwards.
 Whether `preCompact` output can inject context was not verified, so Firstmate registers nothing for it.
 A compacted Copilot session keeps whatever context survived rather than receiving a fresh digest.
+Observed on 2026-11-11 on tmux and Herdr: after `/compact` the model no longer held the digest, and on tmux it reran `bin/fm-session-start.sh` when asked what its project instructions say to do at session start ([evidence](verification/copilot.md#copilot-as-this-homes-primary)).
 
 ### Cursor compaction
 

@@ -2,7 +2,7 @@
 
 Verified on 2026-11-04 on Linux (WSL2) with `GitHub Copilot CLI 1.0.105.` through a real pty.
 The [adapter reference](../../.agents/skills/harness-adapters/references/harness/copilot.md) owns operating limits; the [spawn header](../../bin/fm-spawn.sh) owns launch mechanics.
-Every backend other than tmux and Herdr is refused; a Copilot persistent secondmate is verified on both under Secondmate below.
+Every backend other than tmux and Herdr is refused; a Copilot persistent secondmate is verified on both under Secondmate below, and a hand-opened primary under Copilot as this home's primary.
 Vendor observations marked as a pty were made through a private pty; the Herdr trial section records what a real pane showed.
 
 ## Unanswerable questions
@@ -266,9 +266,41 @@ On 2026-11-07, in a named isolated Herdr lab session (guarded helper for every l
   A before and after listing of the lab home to two levels showed only the task's own records removed (`busy-gen`, `busy-state`, `control-relaunch` with its `brief-prior`, `meta-prior` and `note` records, `copilot-home`, `copilot-plugin`, `git-hooks`, `meta`, `status`, `turn-ended`) and `terminal-outcomes` plus the watcher-stale banner marker added; the project clone, `data/`, and the rest of the home were unchanged, and no file under the captain's real `~/.copilot` changed.
 - The lab helper's teardown stopped and deleted the lab session, and the default session was still running.
 
+## Copilot as this home's primary
+
+On 2026-11-11, Copilot 1.0.109 (model `claude-haiku-4.5`, `--allow-all`) was opened by hand as the primary in a scratch clone of this repository outside the firstmate home, with a lab `FM_HOME` from `bin/fm-lab-home.sh` and a relocated `COPILOT_HOME` whose `trustedFolders` named only that clone.
+It ran once on tmux 3.7c (private socket) and once on Herdr 0.9.5 (named lab session through `bin/fm-herdr-lab.sh`; the default session stayed running).
+Raw traces (`events.jsonl`, wake logs, digests) are kept under `data/copilot-primary-support/`.
+
+| Step | tmux | Herdr |
+| --- | --- | --- |
+| Session-start digest | `primary harness: copilot` and `Lock: held by this session` in the `sessionStart` `additionalContext`; the model quoted both | the same two lines; the wake process targeted `<lab session>:w1:p1` |
+| Pre-tool guards | `cd projects` denied by `persistent-cd`; the `task` tool denied by `subagent-dispatch` | the same two denials |
+| Turn-end guard | with a task record, no watcher, and a trivial prompt: one `turn-end-guard` block, the model reran `bin/fm-copilot-wake.sh start`, the next stop ended the turn | the same |
+| Typed wake from a real status line | status line at +0 s, queue row at +46 s (the watcher's own poll), doorbell typed (`verdict=empty`) at +47 s, queue empty after the model's `--ack-through` | queue row at +32 s, doorbell typed at +34 s, queue empty by +75 s |
+| Double Escape on a running `sleep` | `Operation cancelled by user`; the turn record stayed `busy`; a status line queued afterwards rang once the record was 120 s old (`FM_COPILOT_WAKE_INTERRUPT_GRACE` default) | `Operation cancelled by user`; the record stayed `busy`; the later ring is not isolated because a finished background shell from the first attempt started a turn |
+| `/compact` | `session.compaction_complete`, no new `sessionStart`; asked, the model held no digest | the same |
+| `/exit` | the wake process logged `stopped: the pane agent is gone` and no firstmate process survived | the same; the pane returned to its shell with `Resume copilot --resume=<id>` |
+
+- An unacknowledged row was typed again after the 60 s re-ring grace on Herdr (rows at 11:59:58Z and 12:00:58Z), and the doorbell was never typed into a draft or a running turn.
+- After `/compact` the digest is gone and nothing re-sends it. When asked what its project instructions say to do at session start, the model on tmux ran `bin/fm-session-start.sh` and printed the digest again, so a compacted primary recovers by the session-start section of `AGENTS.md`, not by a hook. No compaction transport was built, and whether `preCompact` output can inject context is still unmeasured.
+- Copilot 1.0.109 draws `Working · <n> B ctrl+c interrupt` while a turn runs. The wake read it correctly: no doorbell was typed into a running turn.
+- A first tmux attempt inherited the parent's Herdr variables, so `fm-copilot-wake.sh start` resolved a pane of the default Herdr session; it stood down within 8 s with an empty queue and typed nothing. The lab was rebuilt with a scrubbed environment and a real `tmux` binary first on `PATH`. A hand-opened primary needs its own multiplexer's variables only.
+
+### Away mode on a Copilot primary
+
+The supervision host has no Copilot arm owner (a parked `agentStop` leaves the pane deaf, see Parked hooks), and the typed-wake process stands down once `state/.afk` exists, so `/afk` and `/quiet` use the away daemon, as they do for every primary the host does not run on.
+On tmux the model ran `bin/fm-afk-launch.sh enter` and `start`; the daemon launched in a detached tmux session supervising the pane. A `needs-decision` status line was escalated 1 s after the watcher signal, and a `FIRSTMATE_OP: v1 away-supervisor` prompt was typed into the pane and reached `userPromptSubmitted` with the U+2063 marker intact (bytes `e2 81 a3`), so Copilot keeps the invisible envelope and the daemon needs no record-backed doorbell. `bin/fm-afk-launch.sh stop` cleared the record and the daemon.
+On a Herdr pane the daemon's generic composer read classified the captured idle Copilot screen as `unknown` (the tmux capture read `empty`), which would have deferred every injection. The daemon now reads its supervisor pane's composer as Copilot when the primary is Copilot, and the same capture reads `empty`. The full daemon run was not repeated on Herdr.
+
 ## Still not exercised
 
-Secondmate use and a host that keeps the Copilot token in `config.json` rather than the OS keyring were not exercised.
+- A host that keeps the Copilot token in `config.json` rather than the OS keyring.
+- The update restart (`bin/fm-secondmate-restart.sh`) on a live Copilot secondmate.
+- A keystroke landing between the composer check and the typed line, on either backend.
+- The away daemon on a Herdr Copilot primary, and the interrupted-turn ring on Herdr.
+- Output from `preCompact`, and `copilot --resume <id>`.
+- Any Copilot version other than 1.0.105 for the worker and secondmate runs and 1.0.109 for the primary run.
 
 ## Reusable guards
 
