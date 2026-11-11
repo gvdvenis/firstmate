@@ -212,7 +212,7 @@ The first prompt asked the model to run `bin/fm-copilot-wake.sh start`, and scri
 - A plain clone's `bin/fm-lock.sh` recorded the Copilot pid in `state/.lock` once `copilot` joined the session-lock vocabulary; without it the digest reported a read-only session.
 - A real session-start digest printed `primary harness: copilot`, `Lock: held by this session`, and the `Mode: GitHub Copilot CLI typed wake` protocol, after `bin/fm-sessionstart-copilot.sh` named the harness; without that the digest's process chain passed the eight levels `bin/fm-harness.sh` climbs and it reported `unknown`.
 - The doorbell is the ASCII record-backed form from `bin/fm-operational-input.sh`, so whether Copilot keeps U+2063 in a typed prompt was not measured.
-- A keystroke landing between the composer check and the typed line was not exercised; terminal input has no compare-and-type.
+- The keystroke window between the composer check and the typed line is recorded in "Keystroke window" below.
 - The wake on a Herdr pane is recorded in the next section.
 
 ```bash
@@ -238,7 +238,7 @@ The wake used the same grace settings as the tmux run (2 s poll, 8 s first re-ri
 - `herdr pane process-info` listed the Copilot process in the pane's foreground with argv[0] `copilot` and kernel name `MainThread` while idle and during a shell tool, so a foreground list without `copilot` means the agent exited. The sanitized body is `tests/captures/copilot-1.0.105-herdr/process-info.json`.
 - The doorbell went through the ordinary typed-input path (`pane send-text`, then Enter) and the composer read stayed `empty` before each ring, `pending` with the draft, and `empty` after.
 - Herdr's own agent state is not read by the wake; the busy record and composer verdict decide, as on tmux.
-- The same keystroke window between the composer check and the typed line exists on Herdr, and was not exercised.
+- The Herdr keystroke window is recorded in "Keystroke window" below.
 - Interrupted-turn grace (double Escape) was not re-run on Herdr; its logic is backend-independent and pinned on tmux.
 
 ```bash
@@ -339,11 +339,31 @@ The pane tails are pinned in `tests/captures/copilot-1.0.109-tmux` and asserted 
 
 On the same date the Copilot, daemon, harness-precedence, afk-launch and secondmate-liveness suites passed under `bin/fm-test-run.sh` with the tmux binary first on `PATH`; `tests/fm-copilot-signals-live-e2e.test.sh` capability-skipped without its opt-in.
 
+## Keystroke window
+
+Copilot CLI 1.0.109, tmux 3.7c, Herdr 0.9.5, 2026-11-11, `bin/fm-copilot-wake.sh` `ring_once`.
+Terminal input has no compare-and-type, so a key typed between the composer read and the doorbell is submitted to the model together with it.
+- Before the narrowing the window was the typed doorbell's 0.5 s settle plus a second composer read and a busy-baseline read: about 0.65 to 0.8 s on both backends.
+  A key injected inside it was submitted merged with the doorbell on 7 of 7 trials.
+- Copilot swallows the Enter of an unbracketed fast burst, so one `send-keys -l ... Enter` call leaves the doorbell unsent.
+  A bracketed paste followed by Enter in one tmux command list is submitted (5 of 5).
+  Herdr's `pane run` submits an unbracketed line (2 of 2).
+- Now the ring reads the cursor before the composer read on tmux and re-tests it inside the tmux server in the same command list as the paste and the Enter (`fm_backend_tmux_paste_submit_if_cursor`).
+  On Herdr it re-reads the composer immediately before one `pane run`.
+  A key that lands before the guard makes the ring refuse and leaves the draft alone; the portable tests inject one and assert that.
+- Measured remaining window: about 5 to 10 ms on tmux and 10 to 30 ms on Herdr (scout sweeps with 2 to 5 trials per cell; keys injected at +0 ms merged in 1 of 2 tmux trials, keys from +2 ms on landed after the Enter as a new draft).
+- Live re-check after the change, on a private tmux socket and a lab Herdr session with Copilot 1.0.109 trusting only a scratch clone: an idle pane received the doorbell and started a turn on both backends, and a pane holding the draft `half written` was left untouched with no doorbell typed.
+  The tmux guard call took 11 to 12 ms; on Herdr the whole guard (readiness check, re-read, `pane run`) took 59 ms through the lab helper, of which only the gap between the re-read and the `pane run` is exposed.
+- The limit that remains is Copilot's own echo time (22 to 35 ms on tmux): a key already written to the pane but not yet drawn cannot be seen by any screen or cursor read, so it can still merge with the doorbell.
+  The merged line is submitted as one prompt, the wake queue still holds the row, and the user's text reaches the model early.
+- Not built on purpose: removing only the typed doorbell from the composer after a merge takes about 2 s and races with further typing.
+- If Copilot stops enabling bracketed paste, the Enter is swallowed and the doorbell stays unsent; the existing pending path then sends Enter only.
+
 ## Still not exercised
 
 - A live host that keeps the Copilot token in `config.json` rather than the OS keyring (the copy is only pinned with fake values).
 - The update restart (`bin/fm-secondmate-restart.sh`) on a live Copilot secondmate.
-- A keystroke landing between the composer check and the typed line, on either backend.
+- A real attached client's typing, IME input, and a slash or `@` popup opening in the keystroke window; keys were injected through the multiplexer.
 - Output from `preCompact`.
 - An in-process `/resume` to another session, whose `source` was not recorded.
 - Any Copilot version other than 1.0.105 and 1.0.109 (see "Copilot 1.0.109 output reads"), and a full worker or secondmate run on 1.0.109.

@@ -94,6 +94,30 @@ done
 fm_backend_herdr_send_text_line "$TARGET" "LC_ALL=C.UTF-8 exec -a copilot bash '$TMP_ROOT/pane.sh' '$TMP_ROOT'" || fail "could not start the stand-in"
 export FM_SUPERVISOR_BACKEND=herdr FM_SUPERVISOR_TARGET="$TARGET"
 
+# While $INJECT exists, the first styled pane read (the ring's composer read) is
+# followed by one typed key, drawn before the ring goes on: a keystroke landing
+# right after the composer read.
+INJECT="$TMP_ROOT/inject-key"
+REAL_HERDR=$(command -v herdr)
+mkdir -p "$TMP_ROOT/herdr-shim"
+cat > "$TMP_ROOT/herdr-shim/herdr" <<SH
+#!/usr/bin/env bash
+"$REAL_HERDR" "\$@"
+rc=\$?
+case " \$* " in
+  *" pane read "*" ansi "*)
+    if [ -e "$INJECT" ]; then
+      rm -f "$INJECT"
+      "$REAL_HERDR" pane send-text "$PANE" Q --session "$SESSION" >/dev/null 2>&1
+      sleep 0.5
+    fi
+    ;;
+esac
+exit \$rc
+SH
+chmod +x "$TMP_ROOT/herdr-shim/herdr"
+export PATH="$TMP_ROOT/herdr-shim:$PATH"
+
 count() { grep -c 'operational input waiting' "$SUBMITTED" 2>/dev/null; }
 row() { GEN_RING=$((GEN_RING + 1)); printf '%s\t%s\tsignal\tk\tp\n' "$(date +%s)" "$((1000 + GEN_RING))" >> "$STATE/.wake-queue"; }
 wait_until() { local end=$(( $(date +%s) + $1 )); while [ "$(date +%s)" -lt "$end" ]; do eval "$2" && return 0; sleep 0.2; done; return 1; }
@@ -136,6 +160,19 @@ fm_backend_herdr_cli "$SESSION" pane send-keys "$PANE" ctrl+u >/dev/null
 wait_until 15 "[ \"\$(count)\" -gt $n ]" || fail "the wake was lost after the draft cleared"
 grep -q 'half written' "$SUBMITTED" && fail "the wake merged with the draft"
 pass "fm-copilot-wake: a half-written line is left intact and the wake lands after it clears"
+
+: > "$STATE/.wake-queue"
+: > "$INJECT"
+row
+n=$(count)
+wait_until 15 '[ ! -e "$INJECT" ]' || fail "the key was never injected"
+wait_until 15 'grep -q "the composer changed before the doorbell landed" "$STATE/.copilot-wake.log"' \
+  || fail "the ring did not refuse after the key landed; log: $(cat "$STATE/.copilot-wake.log")"
+pane_text | grep -q '┃ Q$' || fail "the operator's key was not left alone: $(pane_text)"
+grep -q 'Q' "$SUBMITTED" && fail "the key merged with the doorbell: $(cat "$SUBMITTED")"
+fm_backend_herdr_cli "$SESSION" pane send-keys "$PANE" ctrl+u >/dev/null
+wait_until 15 "[ \"\$(count)\" -gt $n ]" || fail "the wake was lost after the refused ring"
+pass "fm-copilot-wake: a key landing right after the composer read makes the ring refuse and stay out of the draft"
 
 : > "$STATE/.wake-queue"
 printf 'picker\n' > "$MODE"

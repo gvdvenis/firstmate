@@ -36,9 +36,19 @@ trap cleanup_all EXIT
 
 SHIM="$TMP_ROOT/shim"
 mkdir -p "$SHIM" "$STATE" "$HOME_DIR/bin"
+# While $INJECT exists, the first composer read (capture-pane -e) is followed by one typed key: a
+# keystroke landing right after the ring's composer read, drawn before the ring goes on.
+INJECT="$TMP_ROOT/inject-key"
 cat > "$SHIM/tmux" <<SH
 #!/usr/bin/env bash
-exec "$REAL_TMUX" -L "$SOCKET" "\$@"
+"$REAL_TMUX" -L "$SOCKET" "\$@"
+rc=\$?
+if [ "\$1 \$2" = "capture-pane -e" ] && [ -e "$INJECT" ]; then
+  rm -f "$INJECT"
+  "$REAL_TMUX" -L "$SOCKET" send-keys -t lab:main -l Q
+  sleep 0.5
+fi
+exit \$rc
 SH
 chmod +x "$SHIM/tmux"
 export PATH="$SHIM:$PATH"
@@ -158,6 +168,19 @@ tmux send-keys -t lab:main C-u
 wait_until 15 "[ \"\$(count)\" -gt $n ]" || fail "the wake was lost after the draft cleared"
 grep -q 'half written' "$SUBMITTED" && fail "the wake merged with the draft: $(cat "$SUBMITTED")"
 pass "fm-copilot-wake: a half-written line defers the wake, stays intact, and the wake lands after it clears"
+
+clear_queue
+: > "$INJECT"
+row
+n=$(count)
+wait_until 15 '[ ! -e "$INJECT" ]' || fail "the key was never injected"
+wait_until 15 'grep -q "the composer changed before the doorbell landed" "$STATE/.copilot-wake.log"' \
+  || fail "the ring did not refuse after the key landed; log: $(cat "$STATE/.copilot-wake.log")"
+pane_text | grep -q '❯ Q$' || fail "the operator's key was not left alone: $(pane_text)"
+grep -q 'Q' "$SUBMITTED" && fail "the key merged with the doorbell: $(cat "$SUBMITTED")"
+tmux send-keys -t lab:main C-u
+wait_until 15 "[ \"\$(count)\" -gt $n ]" || fail "the wake was lost after the refused ring"
+pass "fm-copilot-wake: a key landing right after the composer read makes the ring refuse and stay out of the draft"
 
 clear_queue
 printf 'picker\n' > "$MODE"
