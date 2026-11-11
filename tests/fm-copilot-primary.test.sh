@@ -109,10 +109,9 @@ test_sessionstart_routes_the_payload_source() {
   dir=$(make_primary_dir "$TMP_ROOT/session-resume")
   out=$(run_registered "$dir" sessionStart "$(session_payload resume)")
   ctx=$(printf '%s' "$out" | jq -r '.additionalContext // empty' 2>/dev/null)
-  case "$ctx" in *'FIRSTMATE DIGEST'*) fail "a resumed session must not re-run the full digest: $out" ;; esac
-  case "$ctx" in *'FIRSTMATE_OP: '*|*'session-start'*) ;; *) fail "a resumed session must get the session-start instruction instead: $out" ;; esac
-  [ ! -s "$dir/state/digest-args" ] || fail "resume ran the digest: $(cat "$dir/state/digest-args")"
-  pass "fm-sessionstart-copilot: the payload source reaches the run wrapper's routing (resume is a nudge)"
+  case "$ctx" in *'FIRSTMATE DIGEST'*) ;; *) fail "a resumed session is a new process and must take the helm with the full digest: $out" ;; esac
+  grep -q -- '--source startup' "$dir/state/digest-args" || fail "resume must reach the digest as a startup: $(cat "$dir/state/digest-args")"
+  pass "fm-sessionstart-copilot: a resumed session gets the full digest, not a nudge"
 }
 
 test_sessionstart_unrecognized_source_gets_the_full_digest() {

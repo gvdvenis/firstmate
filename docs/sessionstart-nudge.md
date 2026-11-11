@@ -394,7 +394,7 @@ The hook fires when the first prompt is submitted, not when the pane opens.
 | Copilot event | Payload `source` | Action |
 | --- | --- | --- |
 | First prompt of a new session | `new` | Full digest |
-| First prompt after `--continue` | `resume` | Nudge wrapper |
+| First prompt after `--continue` or `--resume <id>` | `resume` | Full digest (the adapter routes it as `startup`) |
 | First prompt after `/clear` | `new` | Full digest |
 
 `/clear` ends the old session (`sessionEnd`) and starts a new one, so it is indistinguishable from a fresh launch and takes the redundant full digest rather than a re-emit.
@@ -495,7 +495,7 @@ It uses a TERM-resistant digest that exceeds its budget and proves that the dige
 
 `tests/fm-copilot-primary.test.sh` proves the Copilot adapters over sanitized recorded payloads and the tracked registration's own command strings:
 
-- `sessionStart` emits the whole digest as `additionalContext` for `new`, nudges for `resume`, and takes the helm for an unrecognized source or an unreadable payload.
+- `sessionStart` emits the whole digest as `additionalContext` for `new` and `resume`, and takes the helm for an unrecognized source or an unreadable payload.
 - `preToolUse` renders the cd, watcher-arm, and subagent denies as `permissionDecisionReason` with exit 0 and an empty stderr.
 - Subagent-raised payloads, malformed payloads, and the observing tools `read_agent` and `list_agents` are allowed.
 - A linked worker worktree carrying the same registration gets no digest and no deny.
