@@ -3133,8 +3133,9 @@ launch_template() {
   # directory, and answering the dialog is not unattended (declining exits the
   # agent), so COPILOT_HOME is relocated onto a firstmate-owned per-task home
   # whose config.json trusts exactly this worktree (bin/fm-copilot-plugin.sh);
-  # the captain's ~/.copilot stays untouched and login still works because the
-  # credential lives in the OS keyring keyed by account, not in that directory.
+  # the captain's ~/.copilot is never written; login still works because the
+  # credential is in the OS keyring (keyed by account) or, for a config.json login,
+  # carried over by that script (copilotTokens, loggedInUsers, lastLoggedInUser).
   # Trusting the worktree still loads its own project hooks, skills and MCP
   # servers; no setting found suppresses that. --no-ask-user removes the ask_user
   # tool, so an unattended worker decides alone instead of holding on a question

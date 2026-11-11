@@ -211,6 +211,27 @@ jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.trustedFolders == [$wt]' "$cop_hom
 printf '// managed\n{"trustedFolders":["/elsewhere"],"firstLaunchAt":"x"}\n' > "$cop_home/config.json"
 "$ROOT/bin/fm-copilot-plugin.sh" "$state" worker "$gen" "$wt_home" || fail 'home reseed failed'
 jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.firstLaunchAt == "x" and .trustedFolders == [$wt]' "$cop_home/config.json" >/dev/null || fail 'reseed lost keys or kept a stale trust entry'
+# Login carry: only the three login keys are copied from the real config.json, never printed.
+login_src="$TMP_ROOT/login-src"
+mkdir -p "$login_src"
+printf '// managed\n{"copilotTokens":{"https://github.com:u":"fake-token"},"loggedInUsers":[{"host":"https://github.com","login":"u"}],"lastLoggedInUser":{"host":"https://github.com","login":"u"},"model":"x","trustedFolders":["/elsewhere"]}\n' > "$login_src/config.json"
+rm -rf "$state/login.copilot-home"
+COPILOT_HOME="$login_src" "$ROOT/bin/fm-copilot-plugin.sh" "$state" login "$gen" "$wt_home" > "$TMP_ROOT/login.out" 2>&1 || fail 'login seeding failed'
+lc="$state/login.copilot-home/config.json"
+jq -e --arg wt "$(cd "$wt_home" && pwd -P)" '.copilotTokens["https://github.com:u"] == "fake-token" and .loggedInUsers[0].login == "u" and .lastLoggedInUser.login == "u" and .trustedFolders == [$wt] and (keys | sort) == ["copilotTokens","lastLoggedInUser","loggedInUsers","trustedFolders"]' "$lc" >/dev/null || fail 'login keys not carried alone'
+[ "$(stat -c %a "$lc" 2>/dev/null || stat -f %Lp "$lc")" = 600 ] || fail 'task config is not mode 600'
+! grep -q fake-token "$TMP_ROOT/login.out" || fail 'token value printed'
+printf '{"model":"x"}\n' > "$login_src/config.json"
+rm -rf "$state/login.copilot-home"
+COPILOT_HOME="$login_src" "$ROOT/bin/fm-copilot-plugin.sh" "$state" login "$gen" "$wt_home" || fail 'seeding without login keys failed'
+jq -e '(keys | sort) == ["trustedFolders"]' "$lc" >/dev/null || fail 'keys added from a source without a login'
+printf '{ not json' > "$login_src/config.json"
+rm -rf "$state/login.copilot-home"
+COPILOT_HOME="$login_src" "$ROOT/bin/fm-copilot-plugin.sh" "$state" login "$gen" "$wt_home" || fail 'unparsable source not tolerated'
+jq -e '(keys | sort) == ["trustedFolders"]' "$lc" >/dev/null || fail 'unparsable source changed the seed'
+rm -rf "$state/login.copilot-home"
+COPILOT_HOME="$TMP_ROOT/absent" "$ROOT/bin/fm-copilot-plugin.sh" "$state" login "$gen" "$wt_home" || fail 'missing source not tolerated'
+jq -e '(keys | sort) == ["trustedFolders"]' "$lc" >/dev/null || fail 'missing source changed the seed'
 pass "private plugin, trusted home, lifecycle and stale-generation rejection"
 
 for v in 'GitHub Copilot CLI 1.0.105.' 'GitHub Copilot CLI 1.0.109.'; do

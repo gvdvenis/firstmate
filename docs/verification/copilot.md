@@ -80,7 +80,8 @@ Each cell is what the pane and the hook logs showed.
 - The setting `disableAllHooks` read back as `true` from the task home, yet the project hook and the plugin hook both still fired in a `-p` run and an interactive run, so it does not suppress them in 1.0.105.
 - A relocated `COPILOT_HOME` is a fresh directory (`config.json` only, then logs, sessions and `installed-plugins` as the run creates them), so the captain's user-level hooks, plugins, and skills (a real pane showed `4 plugins, 6 hooks, 64 skills`) stay out of the worker.
 - Login worked in a relocated, empty home for `-p` and for the interactive pane: the credential is a `keyring:<host>:<account>@copilot-cli` entry in the OS keyring, not a file under `~/.copilot`.
-- A host without an OS keyring may keep the token in `config.json` instead; that case was not exercised, and its worker would stop at a login prompt in the task home.
+- A host without an OS keyring keeps the token in `config.json` under `copilotTokens`, which a fresh task home lacks.
+  `bin/fm-copilot-plugin.sh` therefore copies only `copilotTokens`, `loggedInUsers`, and `lastLoggedInUser` from the real `config.json` into the task one (mode 600), pinned by `tests/fm-copilot-harness.test.sh` with fake values; a live config.json-token host was not exercised.
 - The model default of a fresh home differs from the captain's (`GPT-6.1 Sol` against `GPT-6 Luna`), so a task that cares passes `--model`.
 - A failing project MCP server holds the first prompt for about a minute (`Loading … still waiting`), which the previous launch also did.
 - No route avoids loading the worktree's own hooks, skills, and MCP servers once the worktree is trusted; the per-task home narrows trust to that worktree and keeps the user home out, which is the only improvement found.
@@ -316,7 +317,7 @@ On the same date the Copilot, daemon, harness-precedence, afk-launch and secondm
 
 ## Still not exercised
 
-- A host that keeps the Copilot token in `config.json` rather than the OS keyring.
+- A live host that keeps the Copilot token in `config.json` rather than the OS keyring (the copy is only pinned with fake values).
 - The update restart (`bin/fm-secondmate-restart.sh`) on a live Copilot secondmate.
 - A keystroke landing between the composer check and the typed line, on either backend.
 - The away daemon on a Herdr Copilot primary, and the interrupted-turn ring on Herdr.
@@ -402,5 +403,5 @@ Both backends behaved the same on every step:
 - **Exit:** `fm-control exit` returned `stopped`, the pane printed `Resume copilot --resume=<session-id>`, and the wake process logged `stopped: the pane agent is gone`.
 - **Relaunch:** `fm-control relaunch` started a new Copilot session in the same pane with its own `sessionStart` digest and a fresh `lock acquired`.
 
-Not exercised: an `/updatefirstmate` style restart (`bin/fm-secondmate-restart.sh`) of a live Copilot mate, a treehouse-leased linked-worktree mate home (the lab homes were clones, and the shared cd guard stays inert in a linked-worktree home by its own scope), a mate with real crewmates of its own, a remote secondmate, and a host whose Copilot token is not in the OS keyring.
+Not exercised: an `/updatefirstmate` style restart (`bin/fm-secondmate-restart.sh`) of a live Copilot mate, a treehouse-leased linked-worktree mate home (the lab homes were clones, and the shared cd guard stays inert in a linked-worktree home by its own scope), a mate with real crewmates of its own, a remote secondmate, and a live host whose Copilot token is not in the OS keyring.
 `tests/fm-copilot-harness.test.sh`, `tests/fm-copilot-primary.test.sh`, and `tests/fm-secondmate-liveness.test.sh` pin the portable parts: the spawn launch shape and trust scope, the three adapters running in a marked secondmate home, the separate busy records, and the liveness sweep's relaunch of a dead Copilot mate.
