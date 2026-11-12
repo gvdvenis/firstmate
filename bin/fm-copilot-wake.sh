@@ -67,6 +67,8 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=bin/fm-busy-lib.sh
+. "$SCRIPT_DIR/fm-busy-lib.sh"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-${FM_ROOT_OVERRIDE:-$FM_ROOT}}"
 STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
@@ -74,7 +76,7 @@ GRACE=${FM_GUARD_GRACE:-300}
 # The busy-contract id of the primary's turn record; a dotfile so no *.meta or
 # task glob ever reads it as a task.
 ID=.copilot-primary
-LOCK="$STATE/.copilot-wake.lock"
+LOCK=$(fm_copilot_wake_lock_dir "$STATE")
 LOG="$STATE/.copilot-wake.log"
 
 POLL=${FM_COPILOT_WAKE_POLL:-2}
@@ -122,8 +124,6 @@ cmd_turn() {  # <busy|idle> <event>
 load_libs() {
   # shellcheck source=bin/fm-task-inbox-lib.sh
   . "$SCRIPT_DIR/fm-task-inbox-lib.sh"
-  # shellcheck source=bin/fm-busy-lib.sh
-  . "$SCRIPT_DIR/fm-busy-lib.sh"
   # shellcheck source=bin/fm-supervisor-target-lib.sh
   . "$SCRIPT_DIR/fm-supervisor-target-lib.sh"
   # shellcheck source=bin/fm-operational-input.sh

@@ -3412,7 +3412,7 @@ copilot)
   }
   copilot_version=$(fm_run_timed 5 "$COPILOT_BIN" --version 2>/dev/null </dev/null | head -n 1 || true)
   fm_copilot_version_verified "$copilot_version" \
-    || echo "warning: copilot version ${copilot_version:-unknown} is outside the verified range 1.0.105-1.0.109; the composer, busy and interrupt reads may not match" >&2
+    || echo "$(fm_copilot_version_warning "$copilot_version")" >&2
   ;;
 pi | pi-signed)
   PI_BIN=$(resolve_pi_executable "$HARNESS") || {

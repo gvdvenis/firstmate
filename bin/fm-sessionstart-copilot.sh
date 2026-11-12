@@ -58,7 +58,7 @@ if COPILOT_BIN=$(command -v copilot 2>/dev/null); then
   copilot_version=$(fm_run_timed 5 "$COPILOT_BIN" --version 2>/dev/null </dev/null | head -n 1 || true)
   fm_copilot_version_verified "$copilot_version" \
     || DIGEST="$DIGEST
-warning: copilot version ${copilot_version:-unknown} is outside the verified range 1.0.105-1.0.109; the composer, busy and interrupt reads may not match"
+$(fm_copilot_version_warning "$copilot_version")"
 fi
 jq -cn --arg c "$DIGEST" '{additionalContext:$c}' 2>/dev/null || true
 exit 0
