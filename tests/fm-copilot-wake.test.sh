@@ -333,6 +333,25 @@ sleep 1
 [ "$(cat "$STATE/.copilot-wake.lock/pid")" = "$WAKE_PID" ] || fail "a prompt replaced a live wake process"
 pass "fm-copilot-wake turn: a prompt restarts a dead wake process once and leaves a live one alone"
 
+# Unattended: no prompt arrives, so `revive` (run by the orphaned watcher) must heal a crash, but only on an idle pane.
+lock_pid() { cat "$STATE/.copilot-wake.lock/pid" 2>/dev/null; }
+kill -9 "$WAKE_PID"
+wait_until 10 '! kill -0 "$WAKE_PID" 2>/dev/null' || fail "the wake process survived the second kill -9"
+dead=$WAKE_PID
+hook busy tool-use
+printf ' Working · 130 B esc esc interrupt\n' > "$FOOTER"
+"$WAKE" revive
+sleep 1
+[ "$(lock_pid)" = "$dead" ] || fail "revive restarted the wake process over a busy turn"
+: > "$FOOTER"
+hook idle agent-stop
+"$WAKE" revive
+wait_until 20 '[ "$(lock_pid)" != "$dead" ] && kill -0 "$(lock_pid)" 2>/dev/null' \
+  || fail "revive did not restart the dead wake process on an idle pane; log: $(tail -n 5 "$STATE/.copilot-wake.log")"
+WAKE_PID=$(lock_pid)
+grep -q 'restarting: the wake process was gone while the pane was idle' "$STATE/.copilot-wake.log" || fail "the revive was not logged"
+pass "fm-copilot-wake revive: restarts a dead wake process on an idle pane and never over a busy turn"
+
 : > "$STATE/.afk"
 wait_until 10 '! kill -0 "$WAKE_PID" 2>/dev/null' || fail "the wake process kept running in away mode"
 WAKE_PID=
