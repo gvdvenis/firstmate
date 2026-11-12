@@ -400,7 +400,10 @@ Live checks, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone,
   Five cancels wrote five lines; none appeared for 12 finished turns, for a double Escape on an idle session, or for a Ctrl-C with nothing running.
   `bin/fm-copilot-wake.sh` rings on it (3.3 s after the cancel, against about 92 s at the 120 s grace), ignores an abort that a later `user.message` follows, and falls back to the grace when the file is unreadable.
   `bin/fm-control.sh` reads a new one in the task's own `COPILOT_HOME` as the cancel acknowledgement; the portable pins are `tests/fm-copilot-wake.test.sh` and `tests/fm-control.test.sh`.
-  Not run: the `fm-control` change on a live Copilot task, an interrupt during a subagent or a permission prompt, Herdr, and the default `~/.copilot` path (inferred from the `agentStop` `transcriptPath`).
+  Not run: the `fm-control` change on a live Copilot task, an interrupt during a subagent or a permission prompt, and Herdr.
+  On 2026-11-12 `FM_COPILOT_SIGNALS_LIVE=1 bash bin/fm-test-run.sh tests/fm-copilot-signals-live-e2e.test.sh` passed on copilot 1.0.109 (tmux 3.7c, Linux, WSL2) in the default `~/.copilot`.
+  It starts a long second turn, sends a double Escape through a private pty, and asserts the transcript gained a line starting with `{"type":"abort"`.
+  The matcher is `fm_copilot_abort_count` in `bin/fm-busy-lib.sh`, shared by the wake and `fm-control`, and the guard fails with `copilot <version>` in its message when a release stops writing that event.
 - **Launch prompt:** a plain launch fired no hook in 25 s; `-i '<prompt>'` fired `userPromptSubmitted` at +2.5 s and `sessionStart` (`source:new`) at +6.4 s with a 7902-character digest, and `--resume=<id> -i` fired `sessionStart` with `source:resume`.
   With an untrusted folder the `-i` prompt waited for the trust dialog and was submitted 0.29 s after `Yes`; `No` ended the session.
 - **Update restart:** `bin/fm-update.sh` then `bin/fm-secondmate-restart.sh` relaunched a live Copilot secondmate fresh (no `--resume`) with one new digest and a new lock.

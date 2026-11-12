@@ -552,7 +552,7 @@ prepare_interrupt_ack() {
         if [ -z "$INTERRUPT_ACK_LOG" ] || [ "$f" -nt "$INTERRUPT_ACK_LOG" ]; then INTERRUPT_ACK_LOG=$f; fi
       done
       [ -n "$INTERRUPT_ACK_LOG" ] || return 0
-      INTERRUPT_ACK_RUN=$(grep -c '^{"type":"abort"' "$INTERRUPT_ACK_LOG" 2>/dev/null || true)
+      INTERRUPT_ACK_RUN=$(fm_copilot_abort_count "$INTERRUPT_ACK_LOG")
       ;;
   esac
 }
@@ -567,7 +567,7 @@ interrupt_cancel_claim() {
     case "$INTERRUPT_ACK_SOURCE" in
       copilot-transcript-abort)
         # A new abort event in the transcript is Copilot's own record of the cancel.
-        [ "$(grep -c '^{"type":"abort"' "$INTERRUPT_ACK_LOG" 2>/dev/null || true)" -le "$INTERRUPT_ACK_RUN" ] \
+        [ "$(fm_copilot_abort_count "$INTERRUPT_ACK_LOG")" -le "$INTERRUPT_ACK_RUN" ] \
           || { printf 'confirmed'; return 0; }
         ;;
       *)
