@@ -14,7 +14,13 @@ command -v tmux >/dev/null 2>&1 || { echo "skip: tmux not found"; exit 0; }
 command -v jq >/dev/null 2>&1 || { echo "skip: jq not found"; exit 0; }
 
 TMP_ROOT=$(fm_test_tmproot fm-copilot-wake)
-REAL_TMUX=$(command -v tmux)
+# The shim below execs REAL_TMUX, so it must be a binary: a version-manager shim (a script with a
+# shebang) first on PATH would resolve back to this test's own shim and recurse without end.
+REAL_TMUX=
+while IFS= read -r candidate; do
+  [ "$(head -c 2 "$candidate" 2>/dev/null)" = '#!' ] || { REAL_TMUX=$candidate; break; }
+done < <(type -aP tmux)
+[ -n "$REAL_TMUX" ] || { echo "skip: no real tmux binary on PATH (only shebang shims); put the tmux binary's directory first on PATH"; exit 0; }
 SOCKET="copilot-wake-$$"
 HOME_DIR="$TMP_ROOT/home"
 STATE="$HOME_DIR/state"
