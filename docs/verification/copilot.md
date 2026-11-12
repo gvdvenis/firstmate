@@ -289,9 +289,8 @@ Raw traces (`events.jsonl`, wake logs, digests) are kept under `data/copilot-pri
   Asked what its project instructions say to do at session start, the model on tmux reran `bin/fm-session-start.sh`, but unprompted none of 4 scout trials did, so `bin/fm-copilot-compact.sh` re-emits it ([Compaction re-emit](#compaction-re-emit)).
 - Copilot 1.0.109 draws `Working · <n> B ctrl+c interrupt` while a turn runs.
   The wake read it correctly: no doorbell was typed into a running turn.
-- A first tmux attempt inherited the parent's Herdr variables, so `fm-copilot-wake.sh start` resolved a pane of the default Herdr session; it stood down within 8 s with an empty queue and typed nothing.
-  The lab was rebuilt with a scrubbed environment and a real `tmux` binary first on `PATH`.
-  A hand-opened primary needs its own multiplexer's variables only.
+- A hand-opened primary needs its own multiplexer's variables only: with the parent's Herdr variables inherited, `fm-copilot-wake.sh start` resolved a pane of the default Herdr session and stood down within 8 s, typing nothing.
+  The run used a scrubbed environment and a real `tmux` binary first on `PATH`.
 
 ### Away mode on a Copilot primary
 
@@ -320,10 +319,8 @@ No ring was typed between the cancel and the grace expiry.
 `copilot --resume=<id>` (printed by `/exit` as `Resume copilot --resume=<id>`) was run in the same pane after `/exit` on Herdr and on tmux 3.7c, with the primary run's lab home.
 The wake process had logged `stopped: the pane agent is gone` and the lock file named a dead pid.
 The `sessionStart` payload was `{"source":"resume","initialPrompt":...,"sessionId":<the earlier id>,...}`, and it fired at the first prompt after the resume, not when the pane opened.
-Before the fix, the adapter routed `resume` to the nudge wrapper, which returned only the one-line `FIRSTMATE_OP: v1 session-start` instruction.
-On Herdr the resumed model followed the restored conversation instead (it ran `bin/fm-afk-return.sh` from the earlier away work), no digest ran, the lock stayed on the dead pid, and no wake process started.
-`bin/fm-sessionstart-copilot.sh` now takes the helm with the full digest on `resume`.
-After that change, on both backends: the `sessionStart` output was the whole digest (11117 characters on Herdr) with `lock acquired: harness pid <the new copilot pid>` and `Lock: held by this session`, and `bin/fm-copilot-wake.sh start` (run when the model was asked to) logged a new `started: target=<pane>` with a fresh watcher.
+`bin/fm-sessionstart-copilot.sh` takes the helm with the full digest on `resume`; the run wrapper's nudge for `resume` is only a one-line instruction, which a resumed model can ignore in favour of its restored conversation.
+On both backends the `sessionStart` output was the whole digest (11117 characters on Herdr) with `lock acquired: harness pid <the new copilot pid>` and `Lock: held by this session`, and `bin/fm-copilot-wake.sh start` (run when the model was asked to) logged a new `started: target=<pane>` with a fresh watcher.
 The resumed model's replies kept the earlier conversation, so a resumed primary has both the old context and the new digest.
 
 ## Copilot 1.0.109 output reads
@@ -384,20 +381,16 @@ Live check, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone o
 
 ## Combined branch run
 
-On 2026-11-11 the five Copilot branches (primary support, Herdr resume and lab, 1.0.109 pins and version warning, keystroke narrowing, compaction re-emit) were merged on top of the Copilot secondmate commit and run together with Copilot 1.0.109 and tmux 3.7c on Linux (WSL2).
-Three merges conflicted only in the "Still not exercised" list below; each kept one statement per fact.
+On 2026-11-11 the primary support, Herdr resume and lab, 1.0.109 pins and version warning, keystroke narrowing, and compaction re-emit changes were run together with Copilot 1.0.109 and tmux 3.7c on Linux (WSL2).
 
 - `bin/fm-test-run.sh` passed every `tests/fm-copilot-*.test.sh` (`tests/fm-copilot-signals-live-e2e.test.sh` capability-skipped without its opt-in), `tests/fm-daemon.test.sh`, `tests/fm-harness-precedence.test.sh`, `tests/fm-afk-launch.test.sh`, `tests/fm-secondmate-liveness.test.sh` and `tests/fm-documentation-audiences.test.sh`; `bin/fm-lint.sh` passed with shellcheck 0.11.0 and actionlint 1.7.12.
-- The tests need a real `tmux` binary first on `PATH`.
-  With a version-manager shim of `tmux` first, the shim of `tests/fm-copilot-wake.test.sh` re-invoked itself until the run was stopped.
-- `tests/fm-copilot-wake.test.sh` failed on the keystroke branch alone ("the ring did not refuse after the key landed"): its fake pane kept the cursor below the footer, so a typed key never moved it and the late cursor guard could not see it.
-  The fake pane now ends each draw with the cursor on the composer line, as Copilot does; `bin/` is unchanged.
+- The tests need a real `tmux` binary first on `PATH`, because a version-manager shim of `tmux` makes the shim of `tests/fm-copilot-wake.test.sh` re-invoke itself.
 - Live smoke on a private tmux socket, a scratch clone of the merged branch, a lab `FM_HOME`, a relocated `COPILOT_HOME` trusting only that clone, a scrubbed environment and Claude Haiku 4.5, opened by hand as the primary in one session:
   - the first prompt received the digest through `sessionStart` (11256 bytes); the model quoted `primary harness: copilot` and the lock line;
   - a status line was typed back as one doorbell, and the model drained and acknowledged the queue (`--ack-through`);
   - `/compact` completed; the next prompt carried one `userPromptSubmitted` output of 8681 bytes (the other three returned 4 bytes), and the model quoted the re-emit's first line;
   - `/exit` returned the pane to its shell with the `Resume copilot --resume=<id>` line, and the wake log recorded `stopped: the pane agent is gone`.
-- Not exercised in the combined run: Herdr (covered by the branches' own sections and by the Herdr wake suite, which ran against its lab session), an update restart, and a natural automatic compaction.
+- Not exercised in the combined run: Herdr, which the sections above and the Herdr wake suite cover.
 
 ## Interrupt transcript, launch prompt and update restart
 
