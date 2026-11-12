@@ -14,6 +14,8 @@
 #   fm-copilot-wake.sh start              start or find the wake process and
 #                                         confirm a live watcher; one status line
 #   fm-copilot-wake.sh run                the loop itself (start launches it)
+#   fm-copilot-wake.sh revive             start the loop again if it is gone and
+#                                         the pane is idle; silent no-op otherwise
 #   fm-copilot-wake.sh turn <busy|idle> <event>
 #                                         record a turn boundary from a native
 #                                         hook; the payload is on stdin
@@ -57,8 +59,10 @@
 # The loop does not restart itself, so the userPromptSubmitted hook (`turn busy
 # user-prompt-submit`) starts it again when work needs supervision and the lock's
 # pid is dead, and bin/fm-turnend-guard-copilot.sh blocks a stop for the same
-# reason. Between a kill and the next prompt nothing rings. The log is appended
-# to and trimmed in place to its newest FM_COPILOT_WAKE_LOG_MAX bytes.
+# reason. The orphaned watcher it leaves behind calls `revive` on every poll,
+# which starts the loop again on the same two conditions plus an idle pane, so an
+# unattended crash heals without a prompt. The log is appended to and trimmed in
+# place to its newest FM_COPILOT_WAKE_LOG_MAX bytes.
 #
 # It stands down when away mode starts, whose daemon owns the watcher, and when
 # the pane's agent exits. A tmux or Herdr pane is supported, found through
@@ -168,7 +172,9 @@ launch_run() {
 
 # A prompt starts a turn, so a wake loop that died since the last one is started
 # again when work needs supervision. Quiet and best effort: the hook never fails.
-restart_if_gone() {
+# With `idle` (the watcher's revive) the pane must also be between turns, so a
+# busy turn or a half-written composer line is never restarted over.
+restart_if_gone() {  # [idle]
   [ ! -e "$STATE/.afk" ] || return 0
   load_libs
   ! fm_pid_alive "$(cat "$LOCK/pid" 2>/dev/null || true)" || return 0
@@ -176,7 +182,12 @@ restart_if_gone() {
   . "$SCRIPT_DIR/fm-supervision-lib.sh"
   fm_supervision_needed "$STATE" "$GRACE" || return 0
   find_pane || return 0
-  log 'restarting: the wake process was gone at a prompt' >> "$LOG"
+  if [ "${1:-}" = idle ]; then
+    pane_idle && [ "$(FM_COMPOSER_HARNESS=copilot fm_backend_composer_state "$BACKEND" "$TARGET" 2>/dev/null)" = empty ] || return 0
+    log 'restarting: the wake process was gone while the pane was idle' >> "$LOG"
+  else
+    log 'restarting: the wake process was gone at a prompt' >> "$LOG"
+  fi
   launch_run
 }
 
@@ -408,6 +419,7 @@ cmd_run() {
 case "${1:-}" in
   start) cmd_start ;;
   run) cmd_run ;;
+  revive) restart_if_gone idle; exit 0 ;;
   turn) shift; cmd_turn "$@" ;;
   *) usage ;;
 esac
