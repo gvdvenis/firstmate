@@ -36,6 +36,8 @@ STATE=${FM_STATE_OVERRIDE:-${FM_HOME:-$FM_ROOT}/state}
 # shellcheck source=bin/fm-primary-scope-lib.sh
 . "$SCRIPT_DIR/fm-primary-scope-lib.sh"
 fm_primary_scope_matches "$FM_ROOT" "$STATE" || exit 0
+# shellcheck source=bin/fm-busy-lib.sh
+. "$SCRIPT_DIR/fm-busy-lib.sh"
 
 PAYLOAD=$(cat 2>/dev/null || true)
 [ -n "$PAYLOAD" ] || exit 0
@@ -49,7 +51,7 @@ REASON=$(printf '%s' "$SYNTH" | "$SCRIPT_DIR/fm-turnend-guard.sh" 2>&1 >/dev/nul
 GUARD_STATUS=$?
 if [ "$GUARD_STATUS" -ne 2 ]; then
   if [ "$(printf '%s' "$SYNTH" | jq -r '.stop_hook_active')" = false ] && [ ! -e "$STATE/.afk" ] \
-    && ! kill -0 "$(cat "$STATE/.copilot-wake.lock/pid" 2>/dev/null)" 2>/dev/null; then
+    && ! kill -0 "$(cat "$(fm_copilot_wake_lock_dir "$STATE")/pid" 2>/dev/null)" 2>/dev/null; then
     # shellcheck source=bin/fm-supervision-lib.sh
     . "$SCRIPT_DIR/fm-supervision-lib.sh"
     if fm_supervision_needed "$STATE" "${FM_GUARD_GRACE:-300}"; then
