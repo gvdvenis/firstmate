@@ -65,7 +65,7 @@ awk -v g="$(fm_control_interrupt_press_gap copilot)" 'BEGIN{exit !(g <= 0.1)}' |
 printf ' ◉ Working · 824 B esc again to interrupt\n' | grep -Eq "$(fm_control_interrupt_arm_signal copilot)" || fail 'real armed footer not recognized'
 [ -n "$(fm_control_interrupt_hazard_signal copilot)" ] || fail 'rewind picker hazard missing'
 [ -z "$(fm_control_interrupt_clear_key copilot)" ] || fail 'Copilot must not erase a composer draft'
-[ "$(fm_control_interrupt_ack_source copilot)" = none ] || fail 'agentStop is not an interrupt acknowledgement'
+[ "$(fm_control_interrupt_ack_source copilot)" = copilot-transcript-abort ] || fail 'the transcript abort event is the interrupt acknowledgement'
 [ "$(fm_control_exit_command copilot)" = /exit ] || fail 'wrong exit command'
 fm_control_harness_supports_kind copilot ship || fail 'ship refused'
 fm_control_harness_supports_kind copilot scout || fail 'scout refused'

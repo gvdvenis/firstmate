@@ -157,15 +157,20 @@ test_launcher_gives_a_plain_terminal_a_tmux_pane() {
   # Inside a pane it runs copilot in place with the arguments.
   LAUNCH_OUT="$d/inplace" PATH="$fakebin:$PATH" TMUX_PANE=%9 FM_ROOT_OVERRIDE="$d" "$ROOT/bin/fm-copilot-primary.sh" --no-auto-update --allow-all >/dev/null 2>&1 &
   for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$d/inplace" ] && break; sleep 0.3; done
-  [ "$(cat "$d/inplace" 2>/dev/null)" = "%9|$d|--no-auto-update --allow-all" ] || fail "in-pane launch must run copilot here with its arguments: $(cat "$d/inplace" 2>/dev/null)"
+  [ "$(cat "$d/inplace" 2>/dev/null)" = "%9|$d|--no-auto-update --allow-all -i Start the firstmate session." ] || fail "in-pane launch must run copilot here with its arguments: $(cat "$d/inplace" 2>/dev/null)"
   # From a plain terminal it opens a tmux pane, so TMUX_PANE is set for the wake.
   env -u TMUX -u TMUX_PANE LAUNCH_OUT="$d/plain" PATH="$fakebin:$PATH" TMUX_TMPDIR="$d/tmux" FM_ROOT_OVERRIDE="$d" \
     FM_COPILOT_PRIMARY_DETACH=1 "$ROOT/bin/fm-copilot-primary.sh" --no-auto-update >/dev/null 2>&1 || fail "plain-terminal launch failed"
   for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$d/plain" ] && break; sleep 0.3; done
   out=$(cat "$d/plain" 2>/dev/null)
-  case "$out" in %*"|$d|--no-auto-update") ;; *) fail "plain-terminal launch must run copilot in a tmux pane in the home: $out" ;; esac
+  case "$out" in %*"|$d|--no-auto-update -i Start the firstmate session.") ;; *) fail "plain-terminal launch must run copilot in a tmux pane in the home: $out" ;; esac
   env -u TMUX -u TMUX_PANE TMUX_TMPDIR="$d/tmux" tmux kill-server 2>/dev/null || true
-  pass "fm-copilot-primary launcher: runs in place inside a pane and opens a tmux pane from a plain terminal"
+  # A prompt the caller chose, or a help or version print, is left alone.
+  rm -f "$d/inplace"
+  LAUNCH_OUT="$d/inplace" PATH="$fakebin:$PATH" TMUX_PANE=%9 FM_ROOT_OVERRIDE="$d" "$ROOT/bin/fm-copilot-primary.sh" --resume=abc -i mine >/dev/null 2>&1 &
+  for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$d/inplace" ] && break; sleep 0.3; done
+  [ "$(cat "$d/inplace" 2>/dev/null)" = "%9|$d|--resume=abc -i mine" ] || fail "a caller's own -i must be kept alone: $(cat "$d/inplace" 2>/dev/null)"
+  pass "fm-copilot-primary launcher: runs in place inside a pane and opens a tmux pane from a plain terminal, adding -i unless the caller chose a prompt"
 }
 
 test_sessionstart_silent_in_a_worker_worktree() {
@@ -275,6 +280,28 @@ test_turnend_blocks_once_when_work_is_unsupervised() {
   out=$(run_registered "$dir" agentStop "$(stop_payload ',"stop_hook_active":true')")
   [ -z "$out" ] || fail "the stop after a block must end the turn, got: $out"
   pass "fm-turnend-guard-copilot: blocks an unsupervised stop once, and allows the stop that follows"
+}
+
+test_turnend_blocks_when_the_wake_process_is_dead() {
+  local dir out
+  dir=$(make_primary_dir "$TMP_ROOT/stop-wake")
+  : > "$dir/state/task1.meta"
+  # A shared guard that allows the stop stands in for a healthy orphan watcher.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$dir/bin/fm-turnend-guard.sh"
+  out=$(run_registered "$dir" agentStop "$(stop_payload)")
+  printf '%s' "$out" | jq -e '.decision == "block"' >/dev/null 2>&1 || fail "a dead wake process with work in flight must block: $out"
+  case "$(printf '%s' "$out" | jq -r '.reason')" in *'bin/fm-copilot-wake.sh start'*) ;; *) fail "the reason must name the start command: $out" ;; esac
+  out=$(run_registered "$dir" agentStop "$(stop_payload ',"stop_hook_active":true')")
+  [ -z "$out" ] || fail "the stop after a block must end the turn: $out"
+  mkdir -p "$dir/state/.copilot-wake.lock"
+  printf '%s\n' "$$" > "$dir/state/.copilot-wake.lock/pid"
+  out=$(run_registered "$dir" agentStop "$(stop_payload)")
+  [ -z "$out" ] || fail "a live wake process must end the turn silently: $out"
+  rm -rf "$dir/state/.copilot-wake.lock"
+  : > "$dir/state/.afk"
+  out=$(run_registered "$dir" agentStop "$(stop_payload)")
+  [ -z "$out" ] || fail "away mode owns supervision and must not be blocked: $out"
+  pass "fm-turnend-guard-copilot: a dead wake process blocks once even when a watcher is healthy"
 }
 
 test_turnend_allows_when_no_supervision_is_needed() {
@@ -505,6 +532,7 @@ test_pretool_skips_subagent_payloads_and_bad_input
 test_pretool_honors_the_subagent_escape_hatch
 test_pretool_inert_in_a_worker_worktree
 test_turnend_blocks_once_when_work_is_unsupervised
+test_turnend_blocks_when_the_wake_process_is_dead
 test_turnend_allows_when_no_supervision_is_needed
 test_turnend_skips_subagent_payloads_and_bad_input
 test_turnend_inert_in_a_worker_worktree
