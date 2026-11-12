@@ -58,14 +58,16 @@ fm_hook_payload_is_copilot() {  # <payload>
   # COPILOT_HOOK_DEPTH for hooks only, never for its tool shells, and a hook's
   # parent process is `copilot` itself (docs/verification/copilot.md).
   case "${COPILOT_HOOK_DEPTH:-}" in ''|*[!0-9]*|0*) ;; *) return 0 ;; esac
-  # shellcheck source=bin/fm-cursor-lib.sh
-  [ -r "${BASH_SOURCE[0]%/*}/fm-cursor-lib.sh" ] && . "${BASH_SOURCE[0]%/*}/fm-cursor-lib.sh" \
-    && fm_copilot_args_are_copilot "$(ps -o args= -p "$PPID" 2>/dev/null)" "$PPID" && return 0
-  command -v jq >/dev/null 2>&1 || return 1
-  printf '%s' "$payload" | jq -e '
+  # The payload test is cheaper than sourcing a library and forking ps, so it runs first.
+  if command -v jq >/dev/null 2>&1 && printf '%s' "$payload" | jq -e '
     type == "object"
     and (.timestamp | type) == "string"
     and (.timestamp | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$"))
     and ((has("permission_mode") or has("prompt_id") or has("tool_use_id")) | not)
-  ' >/dev/null 2>&1
+  ' >/dev/null 2>&1; then
+    return 0
+  fi
+  # shellcheck source=bin/fm-cursor-lib.sh
+  [ -r "${BASH_SOURCE[0]%/*}/fm-cursor-lib.sh" ] && . "${BASH_SOURCE[0]%/*}/fm-cursor-lib.sh" \
+    && fm_copilot_args_are_copilot "$(ps -o args= -p "$PPID" 2>/dev/null)" "$PPID"
 }

@@ -29,12 +29,14 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT=$(CDPATH='' cd -- "$SCRIPT_DIR/.." 2>/dev/null && pwd -P) || exit 0
 STATE=${FM_STATE_OVERRIDE:-${FM_HOME:-$FM_ROOT}/state}
+MARK=$STATE/.copilot-compacted
+# deliver runs on every tool call, so the cheap no-mark test comes before the scope library and jq.
+[ "${1:-}" != deliver ] || [ -e "$MARK" ] || exit 0
 # shellcheck source=bin/fm-primary-scope-lib.sh
 . "$SCRIPT_DIR/fm-primary-scope-lib.sh"
 fm_primary_scope_matches "$FM_ROOT" "$STATE" || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 
-MARK=$STATE/.copilot-compacted
 SID=$(cat 2>/dev/null | jq -r 'select(type == "object" and (has("parentAgentId") | not)) | .sessionId // empty | strings' 2>/dev/null) || exit 0
 [ -n "$SID" ] || exit 0
 
@@ -43,7 +45,6 @@ case "${1:-}" in
     printf '%s\n' "$SID" > "$MARK.tmp.$$" && mv -f "$MARK.tmp.$$" "$MARK"
     ;;
   deliver)
-    [ -e "$MARK" ] || exit 0
     [ "$(cat "$MARK" 2>/dev/null)" = "$SID" ] || exit 0
     mv "$MARK" "$MARK.claimed.$$" 2>/dev/null || exit 0
     rm -f "$MARK.claimed.$$"
