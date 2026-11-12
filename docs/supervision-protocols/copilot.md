@@ -19,7 +19,4 @@ When this session owns supervision and away mode is not active:
 The mechanism, its idle proof, and its limits are owned by the header of `bin/fm-copilot-wake.sh`.
 `bin/fm-turnend-guard-copilot.sh` is the turn-end guard, and [`turnend-guard.md`](../turnend-guard.md) owns its contract.
 A persistent secondmate runs this same protocol in its own home, with its own wake process, queue, and watcher.
-Open a hand-started Copilot primary with `bin/fm-copilot-primary.sh --no-auto-update --allow-all` from the Firstmate home.
-The launcher adds `-i '<one line>'` so the session-start digest arrives without a human prompt ([owner](../sessionstart-nudge.md#github-copilot-cli)), runs `copilot` in place inside tmux or Herdr and otherwise opens it in a tmux session, so a plain or editor terminal still gets the typed wake; native Windows is not supported, use WSL2.
-The flags matter: Copilot downloads new releases in the background and applies them at the next plain launch, `autoUpdate: false` alone does not stop an already-downloaded one, and `COPILOT_AUTO_UPDATE=false` does the same as the flag.
-`--allow-all` alone still shows the folder-trust dialog once; answer `Yes, and remember this folder` so the home stays trusted and its hooks load.
+[`sessionstart-nudge.md`](../sessionstart-nudge.md#github-copilot-cli) owns how to open a hand-started Copilot primary.
