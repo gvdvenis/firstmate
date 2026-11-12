@@ -44,7 +44,7 @@ As this home's own primary, Copilot's session lock, digest, seatbelts, turn-end 
 
 A killed wake process (`kill -9`, the OOM killer) restarts at the next prompt, from the `userPromptSubmitted` hook while work needs supervision, and the turn-end guard blocks a stop once while it is down.
 Unattended, the orphaned watcher calls `bin/fm-copilot-wake.sh revive` on every poll, which restarts the wake process once its lock pid is dead, work needs supervision, and the pane is idle with an empty composer; a busy turn or a half-written line is never restarted over.
-A self-update re-reads `AGENTS.md`, and Copilot's `view` refuses a file of that size (about 50 KB) in one call with `File too large to read at once`; a model then tends to read only the first range and stop.
+A self-update re-reads `AGENTS.md`, and Copilot's `view` refuses a file of that size (about 50 KB) in one call with `File too large to read at once`; a model then tends to read only the first range and stop, so `bin/fm-sessionstart-copilot.sh` appends that chunked-read instruction to the digest it hands a Copilot primary (no other harness's digest carries it).
 Read it in successive `view_range` calls up to the last line (`wc -l` gives the length), or page it through the shell in chunks under about 39 KB, because shell output over that size is also saved to a file instead of returned.
 A hand-opened primary launches with `-i '<one line>'` so the session-start digest arrives without a human prompt ([owner](../../../../../docs/sessionstart-nudge.md#github-copilot-cli)).
 The typed wake loop re-executes itself when a self-update replaces `bin/fm-copilot-wake.sh`, so a running primary does not keep pre-update wake code.

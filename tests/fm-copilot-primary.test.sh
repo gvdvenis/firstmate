@@ -104,6 +104,18 @@ test_sessionstart_emits_additional_context_for_a_new_session() {
   pass "fm-sessionstart-copilot: a new session gets the whole digest as additionalContext"
 }
 
+test_sessionstart_adds_the_chunked_read_note_for_copilot_only() {
+  local dir out ctx raw
+  dir=$(make_primary_dir "$TMP_ROOT/session-chunked")
+  out=$(run_registered "$dir" sessionStart "$(session_payload new)")
+  ctx=$(printf '%s' "$out" | jq -r '.additionalContext // empty' 2>/dev/null)
+  case "$ctx" in *'AGENTS.md'*'view_range'*'do not stop after the first range'*) ;; *) fail "the Copilot digest must carry the chunked-read note: $out" ;; esac
+  raw=$(FM_HOME="$dir" "$dir/bin/fm-sessionstart-run.sh" --source startup </dev/null 2>/dev/null)
+  case "$raw" in *'FIRSTMATE DIGEST'*) ;; *) fail "the harness-neutral digest did not run: $raw" ;; esac
+  case "$raw" in *view_range*) fail "a non-Copilot digest must not carry the Copilot note: $raw" ;; esac
+  pass "fm-sessionstart-copilot: only the Copilot digest carries the chunked AGENTS.md read note"
+}
+
 test_sessionstart_routes_the_payload_source() {
   local dir out ctx
   dir=$(make_primary_dir "$TMP_ROOT/session-resume")
@@ -525,6 +537,7 @@ test_secondmate_home_busy_records_stay_apart() {
 }
 
 test_sessionstart_emits_additional_context_for_a_new_session
+test_sessionstart_adds_the_chunked_read_note_for_copilot_only
 test_sessionstart_routes_the_payload_source
 test_sessionstart_unrecognized_source_gets_the_full_digest
 test_sessionstart_warns_outside_the_verified_version_range
