@@ -285,15 +285,22 @@ Raw traces (`events.jsonl`, wake logs, digests) are kept under `data/copilot-pri
 | `/exit` | the wake process logged `stopped: the pane agent is gone` and no firstmate process survived | the same; the pane returned to its shell with `Resume copilot --resume=<id>` |
 
 - An unacknowledged row was typed again after the 60 s re-ring grace on Herdr (rows at 11:59:58Z and 12:00:58Z), and the doorbell was never typed into a draft or a running turn.
-- After `/compact` the digest is gone. Asked what its project instructions say to do at session start, the model on tmux reran `bin/fm-session-start.sh`, but unprompted none of 4 scout trials did, so `bin/fm-copilot-compact.sh` re-emits it ([Compaction re-emit](#compaction-re-emit)).
-- Copilot 1.0.109 draws `Working · <n> B ctrl+c interrupt` while a turn runs. The wake read it correctly: no doorbell was typed into a running turn.
-- A first tmux attempt inherited the parent's Herdr variables, so `fm-copilot-wake.sh start` resolved a pane of the default Herdr session; it stood down within 8 s with an empty queue and typed nothing. The lab was rebuilt with a scrubbed environment and a real `tmux` binary first on `PATH`. A hand-opened primary needs its own multiplexer's variables only.
+- After `/compact` the digest is gone.
+  Asked what its project instructions say to do at session start, the model on tmux reran `bin/fm-session-start.sh`, but unprompted none of 4 scout trials did, so `bin/fm-copilot-compact.sh` re-emits it ([Compaction re-emit](#compaction-re-emit)).
+- Copilot 1.0.109 draws `Working · <n> B ctrl+c interrupt` while a turn runs.
+  The wake read it correctly: no doorbell was typed into a running turn.
+- A first tmux attempt inherited the parent's Herdr variables, so `fm-copilot-wake.sh start` resolved a pane of the default Herdr session; it stood down within 8 s with an empty queue and typed nothing.
+  The lab was rebuilt with a scrubbed environment and a real `tmux` binary first on `PATH`.
+  A hand-opened primary needs its own multiplexer's variables only.
 
 ### Away mode on a Copilot primary
 
 The supervision host has no Copilot arm owner (a parked `agentStop` leaves the pane deaf, see Parked hooks), and the typed-wake process stands down once `state/.afk` exists, so `/afk` and `/quiet` use the away daemon, as they do for every primary the host does not run on.
-On tmux the model ran `bin/fm-afk-launch.sh enter` and `start`; the daemon launched in a detached tmux session supervising the pane. A `needs-decision` status line was escalated 1 s after the watcher signal, and a `FIRSTMATE_OP: v1 away-supervisor` prompt was typed into the pane and reached `userPromptSubmitted` with the U+2063 marker intact (bytes `e2 81 a3`), so Copilot keeps the invisible envelope and the daemon needs no record-backed doorbell. `bin/fm-afk-launch.sh stop` cleared the record and the daemon.
-On a Herdr pane the daemon's generic composer read classified the captured idle Copilot screen as `unknown` (the tmux capture read `empty`), which would have deferred every injection. The daemon now reads its supervisor pane's composer as Copilot when the primary is Copilot, and the same capture reads `empty`. 
+On tmux the model ran `bin/fm-afk-launch.sh enter` and `start`; the daemon launched in a detached tmux session supervising the pane.
+A `needs-decision` status line was escalated 1 s after the watcher signal, and a `FIRSTMATE_OP: v1 away-supervisor` prompt was typed into the pane and reached `userPromptSubmitted` with the U+2063 marker intact (bytes `e2 81 a3`), so Copilot keeps the invisible envelope and the daemon needs no record-backed doorbell.
+`bin/fm-afk-launch.sh stop` cleared the record and the daemon.
+On a Herdr pane the daemon's generic composer read classified the captured idle Copilot screen as `unknown` (the tmux capture read `empty`), which would have deferred every injection.
+The daemon now reads its supervisor pane's composer as Copilot when the primary is Copilot, and the same capture reads `empty`.
 On a Herdr pane (Copilot 1.0.109, Herdr 0.9.5, named lab session) the full daemon run worked.
 `bin/fm-afk-launch.sh enter --words ...` and `start` launched the daemon in a second workspace of the lab session, supervising the primary's pane.
 A `needs-decision` status line was signalled by the watcher 40 s after it was written (the watcher's poll), the daemon logged `escalate` 4 s later, and the `FIRSTMATE_OP: v1 away-supervisor` prompt reached the model about 90 s after that (the daemon's 90 s escalation batch window), with the U+2063 marker intact (bytes `e2 81 a3` at the start of the `user.message`) and no other text typed into the composer.
@@ -336,7 +343,7 @@ The pane tails are pinned in `tests/captures/copilot-1.0.109-tmux` and asserted 
 - The first-Escape footer was captured 0.1 s after the key, the same gap as `fm_control_interrupt_press_gap`.
 - Only the 1.0.109 busy and armed footers differ from 1.0.105 in anything matched; both versions are pinned by tests.
 - `fm-spawn.sh` prints `warning: copilot version <v> is outside the verified range 1.0.105-1.0.109` to stderr for any other `copilot --version` and still launches (`fm_copilot_version_verified` in `bin/fm-busy-lib.sh`), following the Pi stream-version warning.
-  A primary opened by hand never goes through `fm-spawn.sh`, so it gets no warning.
+  A primary opened by hand gets the same warning from `bin/fm-sessionstart-copilot.sh` with the same bound.
 
 On the same date the Copilot, daemon, harness-precedence, afk-launch and secondmate-liveness suites passed under `bin/fm-test-run.sh` with the tmux binary first on `PATH`; `tests/fm-copilot-signals-live-e2e.test.sh` capability-skipped without its opt-in.
 
@@ -381,8 +388,10 @@ On 2026-11-11 the five Copilot branches (primary support, Herdr resume and lab, 
 Three merges conflicted only in the "Still not exercised" list below; each kept one statement per fact.
 
 - `bin/fm-test-run.sh` passed every `tests/fm-copilot-*.test.sh` (`tests/fm-copilot-signals-live-e2e.test.sh` capability-skipped without its opt-in), `tests/fm-daemon.test.sh`, `tests/fm-harness-precedence.test.sh`, `tests/fm-afk-launch.test.sh`, `tests/fm-secondmate-liveness.test.sh` and `tests/fm-documentation-audiences.test.sh`; `bin/fm-lint.sh` passed with shellcheck 0.11.0 and actionlint 1.7.12.
-- The tests need a real `tmux` binary first on `PATH`. With a version-manager shim of `tmux` first, the shim of `tests/fm-copilot-wake.test.sh` re-invoked itself until the run was stopped.
-- `tests/fm-copilot-wake.test.sh` failed on the keystroke branch alone ("the ring did not refuse after the key landed"): its fake pane kept the cursor below the footer, so a typed key never moved it and the late cursor guard could not see it. The fake pane now ends each draw with the cursor on the composer line, as Copilot does; `bin/` is unchanged.
+- The tests need a real `tmux` binary first on `PATH`.
+  With a version-manager shim of `tmux` first, the shim of `tests/fm-copilot-wake.test.sh` re-invoked itself until the run was stopped.
+- `tests/fm-copilot-wake.test.sh` failed on the keystroke branch alone ("the ring did not refuse after the key landed"): its fake pane kept the cursor below the footer, so a typed key never moved it and the late cursor guard could not see it.
+  The fake pane now ends each draw with the cursor on the composer line, as Copilot does; `bin/` is unchanged.
 - Live smoke on a private tmux socket, a scratch clone of the merged branch, a lab `FM_HOME`, a relocated `COPILOT_HOME` trusting only that clone, a scrubbed environment and Claude Haiku 4.5, opened by hand as the primary in one session:
   - the first prompt received the digest through `sessionStart` (11256 bytes); the model quoted `primary harness: copilot` and the lock line;
   - a status line was typed back as one doorbell, and the model drained and acknowledged the queue (`--ack-through`);
