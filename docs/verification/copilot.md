@@ -390,13 +390,27 @@ Three merges conflicted only in the "Still not exercised" list below; each kept 
   - `/exit` returned the pane to its shell with the `Resume copilot --resume=<id>` line, and the wake log recorded `stopped: the pane agent is gone`.
 - Not exercised in the combined run: Herdr (covered by the branches' own sections and by the Herdr wake suite, which ran against its lab session), an update restart, and a natural automatic compaction.
 
+## Interrupt transcript, launch prompt and update restart
+
+Live checks, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone, lab `FM_HOME`, relocated `COPILOT_HOME`, scrubbed environment, Claude Haiku 4.5):
+
+- **Abort event:** no hook fired on a cancel, but the session transcript `<COPILOT_HOME>/session-state/<sessionId>/events.jsonl` gained `{"type":"abort","data":{"reason":"user_abort"}}` (Escape twice) or `"reason":"user_initiated"` (Ctrl-C) 4-123 ms after the key.
+  Five cancels wrote five lines; none appeared for 12 finished turns, for a double Escape on an idle session, or for a Ctrl-C with nothing running.
+  `bin/fm-copilot-wake.sh` rings on it (3.3 s after the cancel, against about 92 s at the 120 s grace), ignores an abort that a later `user.message` follows, and falls back to the grace when the file is unreadable.
+  `bin/fm-control.sh` reads a new one in the task's own `COPILOT_HOME` as the cancel acknowledgement; the portable pins are `tests/fm-copilot-wake.test.sh` and `tests/fm-control.test.sh`.
+  Not run: the `fm-control` change on a live Copilot task, an interrupt during a subagent or a permission prompt, Herdr, and the default `~/.copilot` path (inferred from the `agentStop` `transcriptPath`).
+- **Launch prompt:** a plain launch fired no hook in 25 s; `-i '<prompt>'` fired `userPromptSubmitted` at +2.5 s and `sessionStart` (`source:new`) at +6.4 s with a 7902-character digest, and `--resume=<id> -i` fired `sessionStart` with `source:resume`.
+  With an untrusted folder the `-i` prompt waited for the trust dialog and was submitted 0.29 s after `Yes`; `No` ended the session.
+- **Update restart:** `bin/fm-update.sh` then `bin/fm-secondmate-restart.sh` relaunched a live Copilot secondmate fresh (no `--resume`) with one new digest and a new lock.
+  The primary's running wake loop kept the pre-update script (it held the replaced file open), which is why the loop now re-executes itself.
+  Copilot's `view` refused the 50.4 KB `AGENTS.md` in one call.
+- **Natural compaction:** two automatic compactions (one in the background, one turn-blocking) each re-sent the digest once through `postToolUse`.
+
 ## Still not exercised
 
 - A live host that keeps the Copilot token in `config.json` rather than the OS keyring (the copy is only pinned with fake values).
-- The update restart (`bin/fm-secondmate-restart.sh`) on a live Copilot secondmate.
 - A real attached client's typing, IME input, and a slash or `@` popup opening in the keystroke window; keys were injected through the multiplexer.
 - An in-process `/resume` to another session, whose `source` was not recorded.
-- A natural automatic compaction during a long real turn.
 - Any Copilot version other than 1.0.105 and 1.0.109 (see "Copilot 1.0.109 output reads"), and a full worker or secondmate run on 1.0.109.
 
 ## Reusable guards

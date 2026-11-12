@@ -56,6 +56,7 @@ unset TMUX TMUX_PANE HERDR_ENV HERDR_PANE_ID FM_ROOT_OVERRIDE FM_STATE_OVERRIDE 
 git init -q "$HOME_DIR"
 : > "$HOME_DIR/AGENTS.md"
 export FM_ROOT_OVERRIDE="$HOME_DIR" FM_HOME="$HOME_DIR" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_GUARD_GRACE=300
+export COPILOT_HOME="$TMP_ROOT/copilot-home"
 export FM_COPILOT_WAKE_POLL=1 FM_COPILOT_WAKE_GRACE=2 FM_COPILOT_WAKE_MAX=3 FM_COPILOT_WAKE_INTERRUPT_GRACE=3 FM_COPILOT_WAKE_START_WAIT=30
 
 : > "$SUBMITTED"
@@ -223,13 +224,120 @@ printf '{}' | FM_ROOT_OVERRIDE="$TMP_ROOT" "$WAKE" turn busy user-prompt-submit
 [ "$(cat "$STATE/.copilot-primary.busy-state")" = "$n" ] || fail "a non-primary directory changed the record"
 pass "fm-copilot-wake turn: subagent payloads and non-primary directories leave the record alone"
 
+# A long interrupt grace from here on, so only the transcript can end a busy turn early.
+kill "$WAKE_PID"
+wait_until 10 '! kill -0 "$WAKE_PID" 2>/dev/null' || fail "the wake process ignored TERM"
+CODE="$TMP_ROOT/code/bin"
+mkdir -p "$CODE"
+for f in "$ROOT"/bin/*; do ln -s "$f" "$CODE/$(basename "$f")"; done
+rm "$CODE/fm-copilot-wake.sh"
+cp "$WAKE" "$CODE/fm-copilot-wake.sh"
+export FM_COPILOT_WAKE_INTERRUPT_GRACE=60 FM_COPILOT_WAKE_LOG_MAX=2500
+# A date shim whose epoch can be stepped, for the loop's own timers only.
+DSHIM="$TMP_ROOT/dshim"
+mkdir -p "$DSHIM"
+printf '0\n' > "$DSHIM/offset"
+REAL_DATE=$(command -v date)
+cat > "$DSHIM/date" <<SH
+#!/usr/bin/env bash
+if [ "\$*" = "+%s" ]; then echo \$(( \$("$REAL_DATE" +%s) + \$(cat "$DSHIM/offset") )); else exec "$REAL_DATE" "\$@"; fi
+SH
+chmod +x "$DSHIM/date"
+# An old log longer than the cap: start appends and trims it to its newest bytes.
+for i in $(seq 1 400); do printf 'old-%05d padding padding\n' "$i"; done > "$STATE/.copilot-wake.log"
+out=$(PATH="$DSHIM:$PATH" "$CODE/fm-copilot-wake.sh" start 2>&1) || fail "start from the copy failed: $out"
+WAKE_PID=$(cat "$STATE/.copilot-wake.lock/pid")
+[ "$(wc -c < "$STATE/.copilot-wake.log")" -le 3000 ] || fail "start did not trim the log: $(wc -c < "$STATE/.copilot-wake.log")"
+grep -q 'old-00400' "$STATE/.copilot-wake.log" || fail "start must keep the newest old lines"
+! grep -q 'old-00001 ' "$STATE/.copilot-wake.log" || fail "start must drop the oldest lines"
+for i in $(seq 1 200); do printf 'junk-%05d padding padding padding\n' "$i"; done >> "$STATE/.copilot-wake.log"
+wait_until 15 '[ "$(wc -c < "$STATE/.copilot-wake.log")" -le 3000 ]' || fail "the running loop never trimmed its log"
+pass "fm-copilot-wake: the log is appended to, and trimmed in place to its newest bytes at start and while running"
+sed 's/ring: typed the doorbell/ring U2: typed the doorbell/' "$WAKE" > "$CODE/fm-copilot-wake.sh.new"
+chmod +x "$CODE/fm-copilot-wake.sh.new"
+mv "$CODE/fm-copilot-wake.sh.new" "$CODE/fm-copilot-wake.sh"
+wait_until 15 'grep -q "restarting: script updated" "$STATE/.copilot-wake.log"' || fail "the loop kept running the old script; log: $(cat "$STATE/.copilot-wake.log")"
+wait_until 15 'sed -n "/restarting: script updated/,\$p" "$STATE/.copilot-wake.log" | grep -q "started: target"' || fail "the loop did not come back: $(cat "$STATE/.copilot-wake.log")"
+[ "$(cat "$STATE/.copilot-wake.lock/pid")" = "$WAKE_PID" ] || fail "the re-executed loop changed pid"
+kill -0 "$WAKE_PID" 2>/dev/null || fail "the re-executed loop died"
+clear_queue
+hook idle agent-stop
+sleep 1
+row
+n=$(count)
+wait_until 15 "[ \"\$(count)\" -gt $n ]" || fail "the re-executed loop never rang"
+grep -q 'ring U2: typed the doorbell' "$STATE/.copilot-wake.log" || fail "the loop still runs pre-update code: $(cat "$STATE/.copilot-wake.log")"
+[ "$(pgrep -fc "$CODE/fm-copilot-wake.sh run")" = 1 ] || fail "more than one wake loop is running"
+pass "fm-copilot-wake: a loop re-executes itself under the same pid after its script file is replaced"
+
+clear_queue
+hook idle agent-stop
+row
+n=$(count)
+wait_until 15 "[ \"\$(count)\" -gt $n ]" || fail "the first ring never came"
+printf -- '-300\n' > "$DSHIM/offset"
+wait_until 15 "[ \"\$(count)\" -gt $((n + 1)) ]" || fail "a clock stepped back 300 s held the re-ring"
+printf '0\n' > "$DSHIM/offset"
+pass "fm-copilot-wake: a backward clock step does not hold the next ring"
+
+TRANSCRIPT="$COPILOT_HOME/session-state/s/events.jsonl"
+mkdir -p "$(dirname "$TRANSCRIPT")"
+clear_queue
+hook idle agent-stop
+: > "$FOOTER"
+printf '{"type":"user.message","data":{}}\n{"type":"assistant.turn_end","data":{}}\n{"type":"abort","data":{"reason":"user_abort"}}\n' > "$TRANSCRIPT"
+hook busy user-prompt-submit
+row
+n=$(count)
+wait_until 12 "[ \"\$(count)\" -gt $n ]" || fail "an abort in the transcript did not release the wake before the grace"
+pass "fm-copilot-wake: a transcript abort rings the wake without waiting out the interrupt grace"
+
+clear_queue
+hook idle agent-stop
+printf '{"type":"abort","data":{}}\n{"type":"user.message","data":{}}\n' > "$TRANSCRIPT"
+hook busy user-prompt-submit
+row
+n=$(count)
+expect_no_ring_for 6 "$n" "a stale abort followed by a new prompt"
+printf '{"type":"abort","data":{}}\n' >> "$TRANSCRIPT"
+wait_until 12 "[ \"\$(count)\" -gt $n ]" || fail "the new turn's abort did not release the wake"
+pass "fm-copilot-wake: an abort older than the newest prompt does not release the wake"
+
+clear_queue
+hook idle agent-stop
+printf '{"type":"user.message","data":{}}\n' > "$TRANSCRIPT"
+hook busy user-prompt-submit
+: > "$FOOTER"
+touch -d '+1 hour' "$STATE/.copilot-primary.busy-state"
+row
+n=$(count)
+wait_until 12 "[ \"\$(count)\" -gt $n ]" || fail "a busy record dated in the future starved the wake"
+pass "fm-copilot-wake: a busy record dated in the future counts as old"
+
+kill -9 "$WAKE_PID"
+wait_until 10 '! kill -0 "$WAKE_PID" 2>/dev/null' || fail "the wake process survived kill -9"
+clear_queue
+hook busy user-prompt-submit
+wait_until 20 '[ -n "$(cat "$STATE/.copilot-wake.lock/pid" 2>/dev/null)" ] && [ "$(cat "$STATE/.copilot-wake.lock/pid")" != "$WAKE_PID" ] && kill -0 "$(cat "$STATE/.copilot-wake.lock/pid")" 2>/dev/null' \
+  || fail "a prompt did not restart the dead wake process; log: $(tail -n 5 "$STATE/.copilot-wake.log")"
+WAKE_PID=$(cat "$STATE/.copilot-wake.lock/pid")
+grep -q 'restarting: the wake process was gone at a prompt' "$STATE/.copilot-wake.log" || fail "the restart was not logged"
+hook busy user-prompt-submit
+sleep 1
+[ "$(cat "$STATE/.copilot-wake.lock/pid")" = "$WAKE_PID" ] || fail "a prompt replaced a live wake process"
+pass "fm-copilot-wake turn: a prompt restarts a dead wake process once and leaves a live one alone"
+
 : > "$STATE/.afk"
 wait_until 10 '! kill -0 "$WAKE_PID" 2>/dev/null' || fail "the wake process kept running in away mode"
 WAKE_PID=
 rm -f "$STATE/.afk"
 pass "fm-copilot-wake: stands down when away mode starts"
 
-out=$("$WAKE" start 2>&1) || fail "a restart failed: $out"
+# The kill -9 above left a deliberately orphaned watcher; away mode did not close it.
+orphan=$(cat "$STATE/.watch.lock/pid" 2>/dev/null)
+[ -z "$orphan" ] || kill "$orphan" 2>/dev/null
+wait_until 10 '[ -z "$orphan" ] || ! kill -0 "$orphan" 2>/dev/null' || fail "the orphaned watcher ignored TERM"
+out=$("$WAKE" start 2>&1) || fail "a restart failed: $out; log: $(tail -n 20 "$STATE/.copilot-wake.log")"
 WAKE_PID=$(cat "$STATE/.copilot-wake.lock/pid")
 tmux kill-window -t lab:main
 wait_until 10 '! kill -0 "$WAKE_PID" 2>/dev/null' || fail "the wake process outlived its pane"

@@ -284,8 +284,12 @@ fm_control_interrupt_ack_source() {  # <harness>
     # manual Escape, and its `Cancelled ...` row is likewise rendered rather than
     # recorded, so fm-control preserves the adapter-owned busy record instead.
     # copilot's agentStop hook fires on normal completion but not on an
-    # interrupt (verified), so fm-control preserves the adapter-owned record.
-    claude|codex|opencode|pi|pi-signed|omp|grok|kimi|cursor|gemini|rovo|agy|devin|commandcode|cortex|kiro|hermes|copilot) printf 'none' ;;
+    # interrupt (verified), so fm-control preserves the adapter-owned record. Its
+    # session transcript does record the cancel: an `abort` event 4-123 ms after
+    # the key (Copilot 1.0.109, five cancels, no false positives), so a new one
+    # is the acknowledgement.
+    copilot) printf 'copilot-transcript-abort' ;;
+    claude|codex|opencode|pi|pi-signed|omp|grok|kimi|cursor|gemini|rovo|agy|devin|commandcode|cortex|kiro|hermes) printf 'none' ;;
     *) return 1 ;;
   esac
 }

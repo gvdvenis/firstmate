@@ -389,7 +389,11 @@ GitHub Copilot CLI is a run-tier harness for a hand-opened primary session.
 Copilot loads project hooks only for a trusted folder.
 The adapter reads `source` from the native payload and delegates to `bin/fm-sessionstart-run.sh`, which owns primary scope, source routing, and the digest.
 It returns the digest as `{"additionalContext":...}`, which reaches the model before its first reply, and prints nothing when the run wrapper stands down.
-The hook fires when the first prompt is submitted, not when the pane opens.
+The hook fires when the first prompt is submitted, not when the pane opens, and Copilot fires no hook at a plain open.
+Launch the primary with `-i '<one line>'` (`bin/fm-copilot-primary.sh` adds it), or `--resume=<id> -i '<one line>'` to resume, so Copilot submits that prompt itself and the digest arrives without a human typing first.
+The one line only has to start a turn, because the hook delivers the digest whatever it says.
+The `/exit` banner's resume command carries no `-i`, so add it by hand or resume through the launcher.
+With a folder that is not yet trusted, Copilot holds the `-i` prompt behind the trust dialog and sends it once the dialog is answered `Yes`, so the digest still follows; answering `No` ends the session.
 
 | Copilot event | Payload `source` | Action |
 | --- | --- | --- |

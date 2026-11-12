@@ -17,6 +17,12 @@
 # so bin/fm-hook-host-lib.sh does not take it for the Claude-shaped duplicate that
 # Copilot delivers from .claude/settings.json and stand the guard down.
 #
+# The typed wake process (bin/fm-copilot-wake.sh) is what rings an idle pane, and a
+# healthy watcher alone does not prove it runs: an orphaned watcher outlives a killed
+# wake process. So when work needs supervision and the wake lock's pid is dead, the
+# stop is blocked once with a `bin/fm-copilot-wake.sh start` reason even though the
+# shared guard allowed it. Away mode, whose daemon owns supervision, is exempt.
+#
 # Scoped to a genuine primary home through bin/fm-primary-scope-lib.sh, because a
 # worker's trusted worktree loads this tracked registration too. Payloads raised
 # by a subagent (they carry parentAgentId) are skipped. Malformed or empty input,
@@ -40,7 +46,19 @@ SYNTH=$(printf '%s' "$PAYLOAD" | jq -ce '
 ' 2>/dev/null) || exit 0
 
 REASON=$(printf '%s' "$SYNTH" | "$SCRIPT_DIR/fm-turnend-guard.sh" 2>&1 >/dev/null)
-if [ "$?" -ne 2 ]; then
+GUARD_STATUS=$?
+if [ "$GUARD_STATUS" -ne 2 ]; then
+  if [ "$(printf '%s' "$SYNTH" | jq -r '.stop_hook_active')" = false ] && [ ! -e "$STATE/.afk" ] \
+    && ! kill -0 "$(cat "$STATE/.copilot-wake.lock/pid" 2>/dev/null)" 2>/dev/null; then
+    # shellcheck source=bin/fm-supervision-lib.sh
+    . "$SCRIPT_DIR/fm-supervision-lib.sh"
+    if fm_supervision_needed "$STATE" "${FM_GUARD_GRACE:-300}"; then
+      REASON='tasks in flight, but the typed wake process is not running, so no wake would reach this pane - run bin/fm-copilot-wake.sh start before ending the turn'
+      GUARD_STATUS=2
+    fi
+  fi
+fi
+if [ "$GUARD_STATUS" -ne 2 ]; then
   printf '%s' "$PAYLOAD" | "$SCRIPT_DIR/fm-copilot-wake.sh" turn idle agent-stop
   exit 0
 fi

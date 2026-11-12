@@ -21,10 +21,14 @@
 # A ring needs both of these to pass, each from its existing owner:
 #   - no turn runs: the busy record says idle (bin/fm-busy-lib.sh, written by the
 #     tracked userPromptSubmitted, agentStop and sessionEnd hooks through the
-#     `turn` subcommand). agentStop never fires on an interrupted turn, so a
-#     record that has said busy for FM_COPILOT_WAKE_INTERRUPT_GRACE seconds also
-#     passes when the pane no longer draws Copilot's busy footer
-#     (fm_busy_lines_match in bin/fm-composer-lib.sh);
+#     `turn` subcommand). agentStop never fires on an interrupted turn and no
+#     hook reports the cancel, but the session transcript (events.jsonl, found
+#     through the sessionId the busy hook records) gets an `abort` event within
+#     about 0.1 s. A busy record whose transcript ends in an abort, with no later
+#     user.message, passes at once; without a readable transcript it passes after
+#     FM_COPILOT_WAKE_INTERRUPT_GRACE seconds. Either way the pane must also no
+#     longer draw Copilot's busy footer (fm_busy_lines_match in
+#     bin/fm-composer-lib.sh);
 #   - the composer reads exactly `empty` (bin/fm-composer-lib.sh). A half-written
 #     operator line reads `pending` and an unrecognized screen, such as a picker,
 #     reads `unknown`; both wait.
@@ -46,6 +50,15 @@
 # unacknowledged head row is re-rung after FM_COPILOT_WAKE_GRACE seconds, doubling
 # up to FM_COPILOT_WAKE_MAX; a new head row starts over. A doorbell left unsent in
 # the composer gets Enter only and is never retyped.
+#
+# A running loop keeps the code it started with, so it re-executes itself, under
+# the same pid, once a pass finds the script file changed (a self-update).
+#
+# The loop does not restart itself, so the userPromptSubmitted hook (`turn busy
+# user-prompt-submit`) starts it again when work needs supervision and the lock's
+# pid is dead, and bin/fm-turnend-guard-copilot.sh blocks a stop for the same
+# reason. Between a kill and the next prompt nothing rings. The log is appended
+# to and trimmed in place to its newest FM_COPILOT_WAKE_LOG_MAX bytes.
 #
 # It stands down when away mode starts, whose daemon owns the watcher, and when
 # the pane's agent exits. A tmux or Herdr pane is supported, found through
@@ -69,10 +82,12 @@ RING_GRACE=${FM_COPILOT_WAKE_GRACE:-60}
 RING_MAX=${FM_COPILOT_WAKE_MAX:-1800}
 INTERRUPT_GRACE=${FM_COPILOT_WAKE_INTERRUPT_GRACE:-120}
 START_WAIT=${FM_COPILOT_WAKE_START_WAIT:-30}
+LOG_MAX=${FM_COPILOT_WAKE_LOG_MAX:-262144}
 case "$POLL" in ''|*[!0-9]*|0) POLL=2 ;; esac
 case "$RING_GRACE" in ''|*[!0-9]*|0) RING_GRACE=60 ;; esac
 case "$RING_MAX" in ''|*[!0-9]*|0) RING_MAX=1800 ;; esac
 case "$INTERRUPT_GRACE" in ''|*[!0-9]*) INTERRUPT_GRACE=120 ;; esac
+case "$LOG_MAX" in ''|*[!0-9]*|0) LOG_MAX=262144 ;; esac
 case "$START_WAIT" in ''|*[!0-9]*|0) START_WAIT=30 ;; esac
 
 WAKE_BODY='firstmate watcher wake - supervision events are queued. Run bin/fm-wake-drain.sh first, handle every wake, then run its exact WAKE_ACK_REQUIRED --ack-through command. bin/fm-copilot-wake.sh owns watcher continuity, so do not run bin/fm-watch-arm.sh after an ordinary wake.'
@@ -85,7 +100,7 @@ usage() {
 log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
 cmd_turn() {  # <busy|idle> <event>
-  local payload
+  local payload sid
   case "${1:-}" in busy|idle) ;; *) usage ;; esac
   [ -n "${2:-}" ] || usage
   # shellcheck source=bin/fm-primary-scope-lib.sh
@@ -94,8 +109,14 @@ cmd_turn() {  # <busy|idle> <event>
   payload=$(cat 2>/dev/null || true)
   # A subagent raises its own events, and its stop would close the parent's turn.
   case "$payload" in *'"parentAgentId":"'*) return 0 ;; esac
+  # The session's own transcript records an interrupt as an `abort` event that no hook reports.
+  if [ "$1" = busy ]; then
+    sid=$(printf '%s' "$payload" | jq -r '.sessionId // empty' 2>/dev/null)
+    case "$sid" in ''|*[!A-Za-z0-9._-]*) ;; *) printf '%s\n' "${COPILOT_HOME:-$HOME/.copilot}/session-state/$sid/events.jsonl" > "$STATE/$ID.transcript" ;; esac
+  fi
   "$SCRIPT_DIR/fm-busy-event.sh" apply "$STATE" "$ID" "$1" --current-gen \
     --source copilot-hook --event "$2" >/dev/null 2>&1 || true
+  [ "$2" != user-prompt-submit ] || restart_if_gone || true
 }
 
 load_libs() {
@@ -111,8 +132,56 @@ load_libs() {
 
 watcher_live() { fm_watcher_healthy "$STATE" "$SCRIPT_DIR/fm-watch.sh" "$GRACE" "$FM_HOME"; }
 
+# Trim the log in place to its newest LOG_MAX bytes: the running loop holds it open
+# in append mode, so a replaced file would swallow its later lines.
+cap_log() {
+  local tmp
+  [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt "$LOG_MAX" ] || return 0
+  tmp=$(tail -c "$LOG_MAX" "$LOG" 2>/dev/null; printf x) || return 0
+  printf '%s' "${tmp%x}" > "$LOG"
+}
+
+# The pane this session types into, or nonzero when there is none: sets BACKEND and TARGET.
+find_pane() {
+  local backend target
+  backend=$(discover_supervisor_backend) || backend=
+  target=$(discover_supervisor_target) || target=
+  case "$backend" in tmux|herdr) ;; *) backend= ;; esac
+  [ -n "$backend" ] && fm_backend_target_exists "$backend" "$target" || return 1
+  BACKEND=$backend
+  TARGET=$target
+}
+
+# Launch the loop detached, in its own process group away from the caller's pipes so
+# it outlives a tool call or hook (the shape bin/fm-claude-stop-autoarm.sh uses for
+# its detached arm). Sets WAKE_PID.
+launch_run() {
+  local monitor_was_on=0
+  cap_log
+  case $- in *m*) monitor_was_on=1 ;; esac
+  set -m 2>/dev/null || true
+  FM_SUPERVISOR_BACKEND=$BACKEND FM_SUPERVISOR_TARGET=$TARGET \
+    nohup "$SCRIPT_DIR/fm-copilot-wake.sh" run </dev/null >>"$LOG" 2>&1 &
+  WAKE_PID=$!
+  [ "$monitor_was_on" -eq 1 ] || set +m 2>/dev/null || true
+}
+
+# A prompt starts a turn, so a wake loop that died since the last one is started
+# again when work needs supervision. Quiet and best effort: the hook never fails.
+restart_if_gone() {
+  [ ! -e "$STATE/.afk" ] || return 0
+  load_libs
+  ! fm_pid_alive "$(cat "$LOCK/pid" 2>/dev/null || true)" || return 0
+  # shellcheck source=bin/fm-supervision-lib.sh
+  . "$SCRIPT_DIR/fm-supervision-lib.sh"
+  fm_supervision_needed "$STATE" "$GRACE" || return 0
+  find_pane || return 0
+  log 'restarting: the wake process was gone at a prompt' >> "$LOG"
+  launch_run
+}
+
 cmd_start() {
-  local backend target pid deadline monitor_was_on=0
+  local pid deadline
   [ -d "$STATE" ] || { echo "copilot wake: FAILED - no state directory at $STATE"; exit 1; }
   load_libs
   if [ -e "$STATE/.afk" ]; then
@@ -121,25 +190,16 @@ cmd_start() {
   fi
   pid=$(cat "$LOCK/pid" 2>/dev/null || true)
   if ! fm_pid_alive "$pid"; then
-    backend=$(discover_supervisor_backend) || backend=
-    target=$(discover_supervisor_target) || target=
-    case "$backend" in tmux|herdr) ;; *) backend= ;; esac
-    if [ -z "$backend" ] || ! fm_backend_target_exists "$backend" "$target"; then
-      echo "copilot wake: FAILED - needs a live tmux or Herdr pane for this session; start Copilot with bin/fm-copilot-primary.sh (backend=${backend:-none}, target=${target:-none})"
+    if ! find_pane; then
+      echo "copilot wake: FAILED - needs a live tmux or Herdr pane for this session; start Copilot with bin/fm-copilot-primary.sh (backend=none, target=none)"
       exit 1
     fi
     # The caller is a model tool call, so a turn is running right now.
     [ -f "$(fm_busy_gen_path "$STATE" "$ID")" ] \
       || "$SCRIPT_DIR/fm-busy-event.sh" arm "$STATE" "$ID" --state busy --source fm-recovery --event wake-start >/dev/null 2>&1 \
       || { echo 'copilot wake: FAILED - could not arm the turn record'; exit 1; }
-    # Its own process group, away from the tool call's pipes, so it outlives the
-    # call (the shape bin/fm-claude-stop-autoarm.sh uses for its detached arm).
-    case $- in *m*) monitor_was_on=1 ;; esac
-    set -m 2>/dev/null || true
-    FM_SUPERVISOR_BACKEND=$backend FM_SUPERVISOR_TARGET=$target \
-      nohup "$SCRIPT_DIR/fm-copilot-wake.sh" run </dev/null >"$LOG" 2>&1 &
-    pid=$!
-    [ "$monitor_was_on" -eq 1 ] || set +m 2>/dev/null || true
+    launch_run
+    pid=$WAKE_PID
   fi
   deadline=$(( $(date +%s) + START_WAIT ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
@@ -154,6 +214,13 @@ cmd_start() {
   exit 1
 }
 
+# 0 iff the newest prompt-or-abort event in the turn's transcript is an abort.
+turn_aborted() {
+  local transcript
+  transcript=$(cat "$STATE/$ID.transcript" 2>/dev/null) && [ -f "$transcript" ] || return 1
+  [ "$(tail -n 500 "$transcript" | grep -o -E '^\{"type":"(user\.message|abort)"' | tail -n 1)" = '{"type":"abort"' ] # shortcut: last 500 lines only, upgrade if one cancelled turn writes more
+}
+
 # 0 iff no turn is running; the header owns the interrupted-turn exception.
 pane_idle() {
   local verdict
@@ -161,7 +228,9 @@ pane_idle() {
   case "$verdict" in
     idle\ *) return 0 ;;
     busy\ *)
-      [ "$(fm_path_age "$(fm_busy_record_path "$STATE" "$ID")")" -ge "$INTERRUPT_GRACE" ] || return 1
+      # A negative age is a file time after a backward clock jump: treat it as old.
+      turn_aborted || [ "$(fm_path_age "$(fm_busy_record_path "$STATE" "$ID")")" -ge "$INTERRUPT_GRACE" ] \
+        || [ "$(fm_path_age "$(fm_busy_record_path "$STATE" "$ID")")" -lt 0 ] || return 1
       fm_backend_capture "$BACKEND" "$TARGET" 12 2>/dev/null | fm_busy_lines_match copilot && return 1
       return 0
       ;;
@@ -222,6 +291,8 @@ ring_tick() {
   fi
   [ -n "$head" ] || return 0
   now=$(date +%s)
+  # A clock stepped back would otherwise hold the next ring for the size of the step.
+  [ "$NEXT_RING" -le $((now + RING_MAX)) ] || NEXT_RING=$now
   [ "$now" -ge "$NEXT_RING" ] || return 0
   ring_once || return 0
   delay=$RING_GRACE
@@ -257,7 +328,7 @@ NAMES
 # One tracked arm at a time. A close leaves its wake in the durable queue, and
 # the next arm names the closed one so it does not announce that wake again.
 arm_tick() {
-  local status=0
+  local status=0 now
   if [ -n "$ARM_PID" ]; then
     kill -0 "$ARM_PID" 2>/dev/null && return 0
     wait "$ARM_PID" 2>/dev/null || status=$?
@@ -272,7 +343,9 @@ arm_tick() {
     fi
     ARM_PID=
   fi
-  [ "$(date +%s)" -ge "$NEXT_ARM" ] || return 0
+  now=$(date +%s)
+  [ "$NEXT_ARM" -le $((now + ARM_FAILS * ARM_FAILS)) ] || NEXT_ARM=$now
+  [ "$now" -ge "$NEXT_ARM" ] || return 0
   if [ -n "$PREDECESSOR" ]; then
     FM_WATCH_PREDECESSOR_ARM_PID=$PREDECESSOR "$SCRIPT_DIR/fm-watch-arm.sh" &
   else
@@ -287,7 +360,11 @@ cleanup_run() {
   fm_lock_release "$LOCK"
 }
 
+# Changes whenever the script file is rewritten or replaced, as an update does.
+script_sig() { cksum < "$SCRIPT_DIR/fm-copilot-wake.sh" 2>/dev/null; }
+
 cmd_run() {
+  local sig now_sig
   load_libs
   BACKEND=${FM_SUPERVISOR_BACKEND:-tmux}
   TARGET=${FM_SUPERVISOR_TARGET:-}
@@ -305,7 +382,14 @@ cmd_run() {
   trap cleanup_run EXIT
   trap 'exit 0' TERM INT HUP
   log "started: target=$TARGET"
+  sig=$(script_sig)
   while :; do
+    now_sig=$(script_sig)
+    if [ -n "$now_sig" ] && [ "$now_sig" != "$sig" ]; then
+      log 'restarting: script updated'
+      cleanup_run
+      exec "$SCRIPT_DIR/fm-copilot-wake.sh" run
+    fi
     if [ -e "$STATE/.afk" ]; then
       log 'stopped: away mode owns supervision'
       exit 0
@@ -314,6 +398,7 @@ cmd_run() {
       log 'stopped: the pane agent is gone'
       exit 0
     fi
+    cap_log
     arm_tick
     ring_tick
     sleep "$POLL"

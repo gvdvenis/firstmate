@@ -302,6 +302,7 @@ The registrations in detail:
   The adapter never parks, because a parked Copilot pane ignores typing, Escape, Ctrl-C, and `/exit` until the hook returns.
   An interrupted turn never reaches `agentStop`, so that boundary is unguarded, as on omp.
   Supervision itself is the separate typed wake in `bin/fm-copilot-wake.sh`, whose live watcher is what the guard checks.
+  The adapter also blocks once when work needs supervision and the wake process's own lock pid is dead, even with a healthy watcher, because an orphaned watcher outlives a killed wake process and nothing would ring the pane; its reason is `run bin/fm-copilot-wake.sh start`, and away mode is exempt.
 - Grok registers a `Stop` hook in `.grok/hooks/fm-primary-turnend-guard.json` and delegates capability selection to `bin/fm-turnend-guard-grok.sh`.
   The tracked Claude Stop and StopFailure entries are inert when `GROK_AGENT` or `GROK_HOOK_EVENT` is present, so Grok's Claude-compatible settings loading cannot create a second continuation path.
   Both markers are required because Grok does not inject the same variables into every process kind.
