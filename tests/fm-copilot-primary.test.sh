@@ -169,7 +169,12 @@ test_launcher_gives_a_plain_terminal_a_tmux_pane() {
   rm -f "$d/inplace"
   LAUNCH_OUT="$d/inplace" PATH="$fakebin:$PATH" TMUX_PANE=%9 FM_ROOT_OVERRIDE="$d" "$ROOT/bin/fm-copilot-primary.sh" --resume=abc -i mine >/dev/null 2>&1 &
   for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$d/inplace" ] && break; sleep 0.3; done
-  [ "$(cat "$d/inplace" 2>/dev/null)" = "%9|$d|--resume=abc -i mine" ] || fail "a caller's own -i must be kept alone: $(cat "$d/inplace" 2>/dev/null)"
+  [ "$(cat "$d/inplace" 2>/dev/null)" = "%9|$d|--no-auto-update --resume=abc -i mine" ] || fail "a caller's own -i must be kept and --no-auto-update added: $(cat "$d/inplace" 2>/dev/null)"
+  # COPILOT_AUTO_UPDATE set by the caller suppresses the added flag.
+  rm -f "$d/inplace"
+  COPILOT_AUTO_UPDATE=true LAUNCH_OUT="$d/inplace" PATH="$fakebin:$PATH" TMUX_PANE=%9 FM_ROOT_OVERRIDE="$d" "$ROOT/bin/fm-copilot-primary.sh" -i mine >/dev/null 2>&1 &
+  for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$d/inplace" ] && break; sleep 0.3; done
+  [ "$(cat "$d/inplace" 2>/dev/null)" = "%9|$d|-i mine" ] || fail "COPILOT_AUTO_UPDATE must suppress --no-auto-update: $(cat "$d/inplace" 2>/dev/null)"
   pass "fm-copilot-primary launcher: runs in place inside a pane and opens a tmux pane from a plain terminal, adding -i unless the caller chose a prompt"
 }
 
