@@ -243,6 +243,15 @@ fm_copilot_wake_lock_dir() {  # <state-dir>
   printf '%s/.copilot-wake.lock' "$1"
 }
 
+# The one owner of how a cancelled Copilot turn reads in its session transcript
+# (events.jsonl): a line whose first key is type, valued abort. The format is
+# undocumented, so tests/fm-copilot-signals-live-e2e.test.sh guards it live.
+FM_COPILOT_ABORT_EVENT='{"type":"abort"'
+
+fm_copilot_abort_count() {  # <events.jsonl> -> number of abort events
+  grep -c "^$FM_COPILOT_ABORT_EVENT" "$1" 2>/dev/null || true
+}
+
 # 0 iff the `copilot --version` text names a release inside the verified range;
 # spawn and the session-start adapter warn, never refuse, outside it.
 fm_copilot_version_verified() {  # <copilot --version text>

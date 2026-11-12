@@ -10,9 +10,10 @@ set -u
 . "$(dirname "${BASH_SOURCE[0]}")/fixtures.sh"
 fm_live_gate opt-in FM_COPILOT_SIGNALS_LIVE copilot python3 jq
 VERSION="copilot $(copilot --version 2>/dev/null | head -1)"
+START="$(mktemp "${TMPDIR:-/tmp}/cpl-start.XXXXXX")"
 LAB=$(mktemp -d "${TMPDIR:-/tmp}/cpl.XXXXXX")
 LAB=$(cd "$LAB" && pwd -P)
-trap 'rm -rf "$LAB"' EXIT
+trap 'rm -rf "$LAB" "$START"' EXIT
 fail() { printf 'not ok - %s: %s\n' "$VERSION" "$1" >&2; exit 1; }
 # shellcheck source=bin/fm-busy-lib.sh
 . "$ROOT/bin/fm-busy-lib.sh"
@@ -37,7 +38,8 @@ model_args=()
 [ -z "${FM_COPILOT_MODEL:-}" ] || model_args=(--model "$FM_COPILOT_MODEL")
 
 # The driver prints "<comm>\t<argv0>" of the live copilot process once the first
-# turn has settled, then types /exit and reports the child's exit status.
+# turn has settled, then starts a long second turn, cancels it with the double
+# Escape fm-control sends, types /exit and reports the child's exit status.
 IFS= read -r -d '' driver <<'PY' || true
 import os, pty, subprocess, select, struct, fcntl, termios, sys, time, signal
 state, plugin, work, release = sys.argv[1:5]
@@ -82,6 +84,13 @@ comm = ps('comm')
 argv0 = ps('args').split(' ')[0]
 print('%s\t%s\t%s' % (comm, argv0, 'busy-seen' if seen_busy else 'busy-missed'), flush=True)
 pump(2)
+os.write(fd, b'Run the shell command: sleep 120'); pump(1); os.write(fd, b'\r')
+deadline = time.time() + 60
+while ' state=busy ' not in rec() and time.time() < deadline:
+    pump(0.2)
+pump(5)
+os.write(fd, b'\x1b'); pump(0.05); os.write(fd, b'\x1b')
+pump(3)
 os.write(fd, b'/exit'); pump(1); os.write(fd, b'\r')
 pump(15)
 done = 0
@@ -113,3 +122,15 @@ echo "ok - $VERSION: live process comm=$comm argv0=$argv0 classified as an agent
   || fail "busy record did not end idle: $(cat "$STATE/live.busy-state" 2>/dev/null)"
 assert_present "$STATE/live.turn-ended" 'agentStop raised no turn-end notification'
 echo "ok - $VERSION: a real prompt produced busy copilot-hook, agentStop closed it and raised the turn-end notification, /exit ended cleanly"
+# The cancel is recorded only in the session transcript, in a format Copilot does
+# not document, so this is the one place a release that renames the event shows up.
+# The default COPILOT_HOME is used because the login lives there.
+events=
+for f in "${COPILOT_HOME:-$HOME/.copilot}"/session-state/*/events.jsonl; do
+  [ -f "$f" ] && [ "$f" -nt "$START" ] || continue
+  if [ -z "$events" ] || [ "$f" -nt "$events" ]; then events=$f; fi
+done
+[ -n "$events" ] || fail 'no session transcript (events.jsonl) was written under the Copilot home'
+[ "$(fm_copilot_abort_count "$events")" -ge 1 ] \
+  || fail "a double Escape on a busy turn wrote no abort event ($FM_COPILOT_ABORT_EVENT at line start) to $events"
+echo "ok - $VERSION: a double Escape cancelled the turn and the transcript recorded an abort event"

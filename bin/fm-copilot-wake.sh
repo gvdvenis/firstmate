@@ -229,7 +229,7 @@ cmd_start() {
 turn_aborted() {
   local transcript
   transcript=$(cat "$STATE/$ID.transcript" 2>/dev/null) && [ -f "$transcript" ] || return 1
-  [ "$(tail -n 500 "$transcript" | grep -o -E '^\{"type":"(user\.message|abort)"' | tail -n 1)" = '{"type":"abort"' ] # shortcut: last 500 lines only, upgrade if one cancelled turn writes more
+  [ "$(tail -n 500 "$transcript" | grep -o -E '^\{"type":"(user\.message|abort)"' | tail -n 1)" = "$FM_COPILOT_ABORT_EVENT" ] # shortcut: last 500 lines only, upgrade if one cancelled turn writes more
 }
 
 # 0 iff no turn is running; the header owns the interrupted-turn exception.
