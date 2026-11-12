@@ -162,6 +162,7 @@ LC_ALL=C NORMALIZED=$(printf '%s' "$TOOL" | tr '[:upper:]' '[:lower:]' | tr -cd 
 case "$TOOL" in
   mcp__*) exit 0 ;;
   # Copilot names MCP tools `<server>-<tool>` instead (github-mcp-server-*).
+  # The prefix match is deliberate and its accepted gap is documented in docs/subagent-guard.md.
   github-mcp-server-*|githubiq-*) exit 0 ;;
 esac
 

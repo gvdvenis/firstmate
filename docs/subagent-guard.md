@@ -52,6 +52,8 @@ Three exclusions keep the shape test from producing false positives.
 
 - A name beginning `mcp__`, or Copilot's `<server>-<tool>` form for the GitHub MCP server (`github-mcp-server-`, `githubiq-`), is never classified.
   An MCP server chooses its own tool names, a task or agent noun there is common, and it has no bearing on fleet dispatch.
+  The match is by prefix, so every tool either server exposes is allowed, including any it adds later that hands work to a cloud agent; that gap is accepted because the guard cannot know a third-party server's tool list.
+  `githubiq-` is the second prefix the guard allows beside `github-mcp-server-`; the repository records no source for it beyond this guard, so treat it as an unverified alias and drop it if no Copilot session shows it.
 - `OBSERVE_ONLY_TOOLS`: the exact names `taskoutput`, `taskstop`, `taskget`, `tasklist`, `cronlist`, `bashoutput`, `killshell`, `manage_subagents` (`managesubagents`), `manage_task` (`managetask`), and Copilot's `read_agent` (`readagent`) and `list_agents` (`listagents`) are allowed.
   These observe or stop work that already exists rather than creating it, and denying them at this layer could strand already-running work with no way to inspect or end it.
   A Claude primary's optional local deny list may still remove them from the schema.
