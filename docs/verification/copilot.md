@@ -323,6 +323,30 @@ The `sessionStart` payload was `{"source":"resume","initialPrompt":...,"sessionI
 On both backends the `sessionStart` output was the whole digest (11117 characters on Herdr) with `lock acquired: harness pid <the new copilot pid>` and `Lock: held by this session`, and `bin/fm-copilot-wake.sh start` (run when the model was asked to) logged a new `started: target=<pane>` with a fresh watcher.
 The resumed model's replies kept the earlier conversation, so a resumed primary has both the old context and the new digest.
 
+## Soak in a second Firstmate home in the default Herdr session
+
+On 2026-11-16 a hand-run soak (review finding F12) ran the Copilot primary in a second Firstmate home inside a real Herdr session.
+Setup: Copilot CLI 1.0.109 (model `gpt-6-luna`, effort medium), Herdr 0.9.5 in the default session (not a lab session), Linux on WSL2, soak commit `4b2f2a48` of `fm/copilot-review-integration`.
+The second home was a plain clone with no remote, one local-only scratch project, `config/backend` set to `herdr` and Claude as the default worker.
+
+- Isolation: the soak lock named its own Copilot pid, different from the real home's Claude pid; the real home's backlog, project list and state counts (2 / 0 / 1) were identical before, during and after.
+- Launch: `bin/fm-copilot-primary.sh --allow-all` in a Herdr pane started Copilot with the folder-trust dialog answered once.
+  The `sessionStart` hook ran with a digest of 29538 bytes, then 32634 bytes after the resume, about three times the roughly 11 KB the runbook expected; no hook failed (243 `hook.start`, 243 `hook.end`).
+- Workers: a Claude scout (`soak-scout-1`) and a Copilot scout (`soak-scout-2`, `harness=copilot` in its record) were dispatched from the primary and both reported that `README.md` has 1 line.
+  In both cases the wake process typed the doorbell into the idle composer and the primary drained and acknowledged by itself.
+- Wake restart: killing the wake process while the pane was idle logged `restarting: the wake process was gone while the pane was idle` and a new process attached.
+  Killing it again and then typing a prompt logged `restarting: the wake process was gone at a prompt`.
+- Cancel: Esc, Esc during a 150 second shell command showed `Operation cancelled by user` and left 1 `abort` event in the session's `events.jsonl`.
+  A doorbell rang afterwards and the primary handled the queued note.
+- Exit and resume: `/exit` logged `stopped: the pane agent is gone` and the lock read stale.
+  `--resume=<id>` through the launcher took a new lock pid and logged a new `started: target=` line, the primary restarted the wake when asked, and a queued note rang and was acknowledged.
+- Teardown: both scouts torn down through the primary left no task records.
+- A shell in the default Herdr session exports `HERDR_ENV` and `HERDR_PANE_ID` but no `HERDR_SESSION`.
+- The `lock acquired` and `Lock: held by this session` digest lines were not visible on the Copilot screen (the primary answered in plain outcome words), so the lock pid was the proof.
+- After the soak a pool of two scratch worktrees for the scratch project remained outside the second home and had to be removed separately.
+- Not recorded: whether Copilot asked to sign in.
+  Not run: the optional second-model pass of the runbook.
+
 ## Copilot 1.0.109 output reads
 
 On 2026-11-11, Copilot 1.0.109 (model `claude-haiku-4.5`, `--allow-all`) ran in a real tmux 3.7c pane (150 columns, private socket) with a relocated `COPILOT_HOME` that trusted only a scratch directory, to check the output firstmate scrapes against the 1.0.105 evidence above.
@@ -416,7 +440,9 @@ Live checks, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone,
 - A live host that keeps the Copilot token in `config.json` rather than the OS keyring (the copy is only pinned with fake values).
 - A real attached client's typing, IME input, and a slash or `@` popup opening in the keystroke window; keys were injected through the multiplexer.
 - An in-process `/resume` to another session, whose `source` was not recorded.
-- Any Copilot version other than 1.0.105 and 1.0.109 (see "Copilot 1.0.109 output reads"), and a full worker or secondmate run on 1.0.109.
+- Any Copilot version other than 1.0.105 and 1.0.109 (see "Copilot 1.0.109 output reads"), and a ship worker or secondmate run on 1.0.109 (a Copilot scout ran on 1.0.109 in the [2026-11-16 soak](#soak-in-a-second-firstmate-home-in-the-default-herdr-session)).
+- macOS and native Windows, which no run has covered (the soak ran on Linux under WSL2).
+- Whether Copilot asked to sign in during the soak, and the optional second-model pass of the runbook, were not recorded or not run.
 
 ## Reusable guards
 
