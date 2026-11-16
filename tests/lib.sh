@@ -1079,3 +1079,20 @@ fm_test_base_path_sans() {
   done
   printf '%s\n' "$dir"
 }
+
+# fm_node_ts_gate <what>: succeed when node can import a .ts file (v22 distro
+# builds without TypeScript support cannot); otherwise print the skip and its
+# gate, and fail so the caller can `|| return 0`.
+fm_node_ts_gate() {
+  local dir probe
+  if ! command -v node >/dev/null 2>&1; then
+    printf 'skip: node not found for %s\n' "$1"
+    return 1
+  fi
+  dir=$(mktemp -d) || return 1
+  printf 'export const ok: number = 1;\n' >"$dir/probe.ts"
+  probe=$(cd "$dir" && node --input-type=module -e 'await import("./probe.ts")' 2>&1) && { rm -rf "$dir"; return 0; }
+  rm -rf "$dir"
+  printf 'skip: node %s cannot import .ts files for %s (gate: import of a .ts probe failed)\n' "$(node --version 2>/dev/null)" "$1"
+  return 1
+}

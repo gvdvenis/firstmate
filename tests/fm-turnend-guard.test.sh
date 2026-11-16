@@ -1169,6 +1169,7 @@ EOF
 
 test_pi_extension_injects_once_per_logical_agent_run() {
   local repo home ext log out status
+  fm_node_ts_gate "Pi logical-run injection test" || return 0
   repo="$TMP_ROOT/pi-logical-run-root"
   home="$TMP_ROOT/pi-logical-run-home"
   ext="$repo/.pi/extensions/fm-primary-turnend-guard.ts"
@@ -1236,6 +1237,7 @@ EOF
 
 test_pi_extension_retries_after_followup_delivery_failure() {
   local repo home ext out status
+  fm_node_ts_gate "Pi delivery-failure retry test" || return 0
   repo="$TMP_ROOT/pi-delivery-failure-root"
   home="$TMP_ROOT/pi-delivery-failure-home"
   ext="$repo/.pi/extensions/fm-primary-turnend-guard.ts"
@@ -1289,6 +1291,7 @@ EOF
 # session above it, while a dead or foreign marker pid is still replaced.
 test_pi_extension_keeps_marker_of_live_ancestor_session() {
   local repo home ext marker_case out status
+  fm_node_ts_gate "Pi live-ancestor marker test" || return 0
   repo="$TMP_ROOT/pi-marker-guard-root"
   home="$TMP_ROOT/pi-marker-guard-home"
   ext="$repo/.pi/extensions/fm-primary-turnend-guard.ts"
@@ -1391,6 +1394,7 @@ EOF
 # set per case so every host exercises both sides.
 test_pi_extension_reads_a_windows_tagged_session_lock() {
   local repo home ext out status
+  fm_node_ts_gate "Pi tagged session-lock test" || return 0
   repo="$TMP_ROOT/pi-tagged-lock-root"
   home="$TMP_ROOT/pi-tagged-lock-home"
   ext="$repo/.pi/extensions/fm-primary-turnend-guard.ts"

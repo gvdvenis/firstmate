@@ -397,6 +397,11 @@ Launch the primary with `-i '<one line>'` (`bin/fm-copilot-primary.sh` adds it),
 The one line only has to start a turn, because the hook delivers the digest whatever it says.
 The `/exit` banner's resume command carries no `-i`, so add it by hand or resume through the launcher.
 With a folder that is not yet trusted, Copilot holds the `-i` prompt behind the trust dialog and sends it once the dialog is answered `Yes`, so the digest still follows; answering `No` ends the session.
+Open a hand-started primary with `bin/fm-copilot-primary.sh --no-auto-update --allow-all` from the Firstmate home.
+The launcher runs `copilot` in place inside tmux or Herdr and otherwise opens it in a tmux session, so a plain or editor terminal still gets the typed wake.
+Native Windows is not supported; use WSL2.
+Copilot downloads new releases in the background and applies them at the next plain launch, `autoUpdate: false` alone does not stop an already-downloaded one, and `COPILOT_AUTO_UPDATE=false` does the same as `--no-auto-update`.
+`--allow-all` alone still shows the folder-trust dialog once; answer `Yes, and remember this folder` so the home stays trusted and its hooks load.
 
 | Copilot event | Payload `source` | Action |
 | --- | --- | --- |

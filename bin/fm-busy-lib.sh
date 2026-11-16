@@ -238,14 +238,36 @@ fm_busy_pi_stream_version_supported() {
   [ "${1:-}" = 1.2.0 ]
 }
 
-# 0 iff the `copilot --version` text names a release inside the range verified
-# live (1.0.105 through 1.0.109, docs/verification/copilot.md); spawn warns, never
-# refuses, outside it.
+# The one owner of the Copilot range verified live (docs/verification/copilot.md)
+# and of the typed-wake lock directory that bin/fm-copilot-wake.sh holds.
+FM_COPILOT_VERIFIED_MIN=105
+FM_COPILOT_VERIFIED_MAX=109
+
+fm_copilot_wake_lock_dir() {  # <state-dir>
+  printf '%s/.copilot-wake.lock' "$1"
+}
+
+# The one owner of how a cancelled Copilot turn reads in its session transcript
+# (events.jsonl): a line whose first key is type, valued abort. The format is
+# undocumented, so tests/fm-copilot-signals-live-e2e.test.sh guards it live.
+FM_COPILOT_ABORT_EVENT='{"type":"abort"'
+
+fm_copilot_abort_count() {  # <events.jsonl> -> number of abort events
+  grep -c "^$FM_COPILOT_ABORT_EVENT" "$1" 2>/dev/null || true
+}
+
+# 0 iff the `copilot --version` text names a release inside the verified range;
+# spawn and the session-start adapter warn, never refuse, outside it.
 fm_copilot_version_verified() {  # <copilot --version text>
   local v
   v=$(printf '%s\n' "${1:-}" | grep -oE '(^|[^0-9.])1\.0\.[0-9]+' | grep -oE '1\.0\.[0-9]+' | head -n 1)
   [ -n "$v" ] || return 1
-  [ "${v##*.}" -ge 105 ] && [ "${v##*.}" -le 109 ]
+  [ "${v##*.}" -ge "$FM_COPILOT_VERIFIED_MIN" ] && [ "${v##*.}" -le "$FM_COPILOT_VERIFIED_MAX" ]
+}
+
+fm_copilot_version_warning() {  # <copilot --version text>
+  printf 'warning: copilot version %s is outside the verified range 1.0.%s-1.0.%s; the composer, busy and interrupt reads may not match' \
+    "${1:-unknown}" "$FM_COPILOT_VERIFIED_MIN" "$FM_COPILOT_VERIFIED_MAX"
 }
 
 fm_busy_stream_seconds() {  # <configured seconds>; off/invalid prints 0

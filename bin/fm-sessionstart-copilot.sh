@@ -19,6 +19,11 @@
 # copilot.md "Resume"), so this adapter takes the helm with the full digest, as
 # Cursor does for a resumed session. A repeat is redundant and idempotent.
 #
+# Copilot's `view` refuses the ~50 KB AGENTS.md in one call, and a model that
+# re-reads it after a self-update tends to stop at the first range, so this
+# adapter alone appends a chunked-read line to the digest it forwards; every
+# other harness's digest is untouched (harness-adapters copilot reference).
+#
 # In a linked crewmate worktree or a foreign checkout fm-sessionstart-run.sh
 # stands down silently and this adapter prints nothing.
 #
@@ -48,6 +53,8 @@ fi
 DIGEST=$(FM_COPILOT_HARNESS=copilot "$SCRIPT_DIR/fm-sessionstart-run.sh" --source "${SOURCE:-startup}" </dev/null 2>/dev/null || true)
 [ -n "$DIGEST" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
+DIGEST="$DIGEST
+Copilot note: if you re-read AGENTS.md (for example after a self-update), its \`view\` refuses the whole file; read it in successive view_range calls until the last line (\`wc -l\` gives the length) and do not stop after the first range."
 # Only fm-spawn checked the Copilot version, so a hand-opened primary that
 # auto-updated outside the verified range got no warning (same bound as there).
 # shellcheck source=bin/fm-timeout-lib.sh
@@ -58,7 +65,7 @@ if COPILOT_BIN=$(command -v copilot 2>/dev/null); then
   copilot_version=$(fm_run_timed 5 "$COPILOT_BIN" --version 2>/dev/null </dev/null | head -n 1 || true)
   fm_copilot_version_verified "$copilot_version" \
     || DIGEST="$DIGEST
-warning: copilot version ${copilot_version:-unknown} is outside the verified range 1.0.105-1.0.109; the composer, busy and interrupt reads may not match"
+$(fm_copilot_version_warning "$copilot_version")"
 fi
 jq -cn --arg c "$DIGEST" '{additionalContext:$c}' 2>/dev/null || true
 exit 0

@@ -285,15 +285,21 @@ Raw traces (`events.jsonl`, wake logs, digests) are kept under `data/copilot-pri
 | `/exit` | the wake process logged `stopped: the pane agent is gone` and no firstmate process survived | the same; the pane returned to its shell with `Resume copilot --resume=<id>` |
 
 - An unacknowledged row was typed again after the 60 s re-ring grace on Herdr (rows at 11:59:58Z and 12:00:58Z), and the doorbell was never typed into a draft or a running turn.
-- After `/compact` the digest is gone. Asked what its project instructions say to do at session start, the model on tmux reran `bin/fm-session-start.sh`, but unprompted none of 4 scout trials did, so `bin/fm-copilot-compact.sh` re-emits it ([Compaction re-emit](#compaction-re-emit)).
-- Copilot 1.0.109 draws `Working · <n> B ctrl+c interrupt` while a turn runs. The wake read it correctly: no doorbell was typed into a running turn.
-- A first tmux attempt inherited the parent's Herdr variables, so `fm-copilot-wake.sh start` resolved a pane of the default Herdr session; it stood down within 8 s with an empty queue and typed nothing. The lab was rebuilt with a scrubbed environment and a real `tmux` binary first on `PATH`. A hand-opened primary needs its own multiplexer's variables only.
+- After `/compact` the digest is gone.
+  Asked what its project instructions say to do at session start, the model on tmux reran `bin/fm-session-start.sh`, but unprompted none of 4 scout trials did, so `bin/fm-copilot-compact.sh` re-emits it ([Compaction re-emit](#compaction-re-emit)).
+- Copilot 1.0.109 draws `Working · <n> B ctrl+c interrupt` while a turn runs.
+  The wake read it correctly: no doorbell was typed into a running turn.
+- A hand-opened primary needs its own multiplexer's variables only: with the parent's Herdr variables inherited, `fm-copilot-wake.sh start` resolved a pane of the default Herdr session and stood down within 8 s, typing nothing.
+  The run used a scrubbed environment and a real `tmux` binary first on `PATH`.
 
 ### Away mode on a Copilot primary
 
 The supervision host has no Copilot arm owner (a parked `agentStop` leaves the pane deaf, see Parked hooks), and the typed-wake process stands down once `state/.afk` exists, so `/afk` and `/quiet` use the away daemon, as they do for every primary the host does not run on.
-On tmux the model ran `bin/fm-afk-launch.sh enter` and `start`; the daemon launched in a detached tmux session supervising the pane. A `needs-decision` status line was escalated 1 s after the watcher signal, and a `FIRSTMATE_OP: v1 away-supervisor` prompt was typed into the pane and reached `userPromptSubmitted` with the U+2063 marker intact (bytes `e2 81 a3`), so Copilot keeps the invisible envelope and the daemon needs no record-backed doorbell. `bin/fm-afk-launch.sh stop` cleared the record and the daemon.
-On a Herdr pane the daemon's generic composer read classified the captured idle Copilot screen as `unknown` (the tmux capture read `empty`), which would have deferred every injection. The daemon now reads its supervisor pane's composer as Copilot when the primary is Copilot, and the same capture reads `empty`. 
+On tmux the model ran `bin/fm-afk-launch.sh enter` and `start`; the daemon launched in a detached tmux session supervising the pane.
+A `needs-decision` status line was escalated 1 s after the watcher signal, and a `FIRSTMATE_OP: v1 away-supervisor` prompt was typed into the pane and reached `userPromptSubmitted` with the U+2063 marker intact (bytes `e2 81 a3`), so Copilot keeps the invisible envelope and the daemon needs no record-backed doorbell.
+`bin/fm-afk-launch.sh stop` cleared the record and the daemon.
+On a Herdr pane the daemon's generic composer read classified the captured idle Copilot screen as `unknown` (the tmux capture read `empty`), which would have deferred every injection.
+The daemon now reads its supervisor pane's composer as Copilot when the primary is Copilot, and the same capture reads `empty`.
 On a Herdr pane (Copilot 1.0.109, Herdr 0.9.5, named lab session) the full daemon run worked.
 `bin/fm-afk-launch.sh enter --words ...` and `start` launched the daemon in a second workspace of the lab session, supervising the primary's pane.
 A `needs-decision` status line was signalled by the watcher 40 s after it was written (the watcher's poll), the daemon logged `escalate` 4 s later, and the `FIRSTMATE_OP: v1 away-supervisor` prompt reached the model about 90 s after that (the daemon's 90 s escalation batch window), with the U+2063 marker intact (bytes `e2 81 a3` at the start of the `user.message`) and no other text typed into the composer.
@@ -313,11 +319,33 @@ No ring was typed between the cancel and the grace expiry.
 `copilot --resume=<id>` (printed by `/exit` as `Resume copilot --resume=<id>`) was run in the same pane after `/exit` on Herdr and on tmux 3.7c, with the primary run's lab home.
 The wake process had logged `stopped: the pane agent is gone` and the lock file named a dead pid.
 The `sessionStart` payload was `{"source":"resume","initialPrompt":...,"sessionId":<the earlier id>,...}`, and it fired at the first prompt after the resume, not when the pane opened.
-Before the fix, the adapter routed `resume` to the nudge wrapper, which returned only the one-line `FIRSTMATE_OP: v1 session-start` instruction.
-On Herdr the resumed model followed the restored conversation instead (it ran `bin/fm-afk-return.sh` from the earlier away work), no digest ran, the lock stayed on the dead pid, and no wake process started.
-`bin/fm-sessionstart-copilot.sh` now takes the helm with the full digest on `resume`.
-After that change, on both backends: the `sessionStart` output was the whole digest (11117 characters on Herdr) with `lock acquired: harness pid <the new copilot pid>` and `Lock: held by this session`, and `bin/fm-copilot-wake.sh start` (run when the model was asked to) logged a new `started: target=<pane>` with a fresh watcher.
+`bin/fm-sessionstart-copilot.sh` takes the helm with the full digest on `resume`; the run wrapper's nudge for `resume` is only a one-line instruction, which a resumed model can ignore in favour of its restored conversation.
+On both backends the `sessionStart` output was the whole digest (11117 characters on Herdr) with `lock acquired: harness pid <the new copilot pid>` and `Lock: held by this session`, and `bin/fm-copilot-wake.sh start` (run when the model was asked to) logged a new `started: target=<pane>` with a fresh watcher.
 The resumed model's replies kept the earlier conversation, so a resumed primary has both the old context and the new digest.
+
+## Soak in a second Firstmate home in the default Herdr session
+
+On 2026-11-16 a hand-run soak (review finding F12) ran the Copilot primary in a second Firstmate home inside a real Herdr session.
+Setup: Copilot CLI 1.0.109 (model `gpt-6-luna`, effort medium), Herdr 0.9.5 in the default session (not a lab session), Linux on WSL2, soak commit `4b2f2a48` of `fm/copilot-review-integration`.
+The second home was a plain clone with no remote, one local-only scratch project, `config/backend` set to `herdr` and Claude as the default worker.
+
+- Isolation: the soak lock named its own Copilot pid, different from the real home's Claude pid; the real home's backlog, project list and state counts (2 / 0 / 1) were identical before, during and after.
+- Launch: `bin/fm-copilot-primary.sh --allow-all` in a Herdr pane started Copilot with the folder-trust dialog answered once.
+  The `sessionStart` hook ran with a digest of 29538 bytes, then 32634 bytes after the resume, about three times the roughly 11 KB the runbook expected; no hook failed (243 `hook.start`, 243 `hook.end`).
+- Workers: a Claude scout (`soak-scout-1`) and a Copilot scout (`soak-scout-2`, `harness=copilot` in its record) were dispatched from the primary and both reported that `README.md` has 1 line.
+  In both cases the wake process typed the doorbell into the idle composer and the primary drained and acknowledged by itself.
+- Wake restart: killing the wake process while the pane was idle logged `restarting: the wake process was gone while the pane was idle` and a new process attached.
+  Killing it again and then typing a prompt logged `restarting: the wake process was gone at a prompt`.
+- Cancel: Esc, Esc during a 150 second shell command showed `Operation cancelled by user` and left 1 `abort` event in the session's `events.jsonl`.
+  A doorbell rang afterwards and the primary handled the queued note.
+- Exit and resume: `/exit` logged `stopped: the pane agent is gone` and the lock read stale.
+  `--resume=<id>` through the launcher took a new lock pid and logged a new `started: target=` line, the primary restarted the wake when asked, and a queued note rang and was acknowledged.
+- Teardown: both scouts torn down through the primary left no task records.
+- A shell in the default Herdr session exports `HERDR_ENV` and `HERDR_PANE_ID` but no `HERDR_SESSION`.
+- The `lock acquired` and `Lock: held by this session` digest lines were not visible on the Copilot screen (the primary answered in plain outcome words), so the lock pid was the proof.
+- After the soak a pool of two scratch worktrees for the scratch project remained outside the second home and had to be removed separately.
+- Not recorded: whether Copilot asked to sign in.
+  Not run: the optional second-model pass of the runbook.
 
 ## Copilot 1.0.109 output reads
 
@@ -336,7 +364,7 @@ The pane tails are pinned in `tests/captures/copilot-1.0.109-tmux` and asserted 
 - The first-Escape footer was captured 0.1 s after the key, the same gap as `fm_control_interrupt_press_gap`.
 - Only the 1.0.109 busy and armed footers differ from 1.0.105 in anything matched; both versions are pinned by tests.
 - `fm-spawn.sh` prints `warning: copilot version <v> is outside the verified range 1.0.105-1.0.109` to stderr for any other `copilot --version` and still launches (`fm_copilot_version_verified` in `bin/fm-busy-lib.sh`), following the Pi stream-version warning.
-  A primary opened by hand never goes through `fm-spawn.sh`, so it gets no warning.
+  A primary opened by hand gets the same warning from `bin/fm-sessionstart-copilot.sh` with the same bound.
 
 On the same date the Copilot, daemon, harness-precedence, afk-launch and secondmate-liveness suites passed under `bin/fm-test-run.sh` with the tmux binary first on `PATH`; `tests/fm-copilot-signals-live-e2e.test.sh` capability-skipped without its opt-in.
 
@@ -377,18 +405,16 @@ Live check, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone o
 
 ## Combined branch run
 
-On 2026-11-11 the five Copilot branches (primary support, Herdr resume and lab, 1.0.109 pins and version warning, keystroke narrowing, compaction re-emit) were merged on top of the Copilot secondmate commit and run together with Copilot 1.0.109 and tmux 3.7c on Linux (WSL2).
-Three merges conflicted only in the "Still not exercised" list below; each kept one statement per fact.
+On 2026-11-11 the primary support, Herdr resume and lab, 1.0.109 pins and version warning, keystroke narrowing, and compaction re-emit changes were run together with Copilot 1.0.109 and tmux 3.7c on Linux (WSL2).
 
 - `bin/fm-test-run.sh` passed every `tests/fm-copilot-*.test.sh` (`tests/fm-copilot-signals-live-e2e.test.sh` capability-skipped without its opt-in), `tests/fm-daemon.test.sh`, `tests/fm-harness-precedence.test.sh`, `tests/fm-afk-launch.test.sh`, `tests/fm-secondmate-liveness.test.sh` and `tests/fm-documentation-audiences.test.sh`; `bin/fm-lint.sh` passed with shellcheck 0.11.0 and actionlint 1.7.12.
-- The tests need a real `tmux` binary first on `PATH`. With a version-manager shim of `tmux` first, the shim of `tests/fm-copilot-wake.test.sh` re-invoked itself until the run was stopped.
-- `tests/fm-copilot-wake.test.sh` failed on the keystroke branch alone ("the ring did not refuse after the key landed"): its fake pane kept the cursor below the footer, so a typed key never moved it and the late cursor guard could not see it. The fake pane now ends each draw with the cursor on the composer line, as Copilot does; `bin/` is unchanged.
+- The tests need a real `tmux` binary first on `PATH`, because a version-manager shim of `tmux` makes the shim of `tests/fm-copilot-wake.test.sh` re-invoke itself.
 - Live smoke on a private tmux socket, a scratch clone of the merged branch, a lab `FM_HOME`, a relocated `COPILOT_HOME` trusting only that clone, a scrubbed environment and Claude Haiku 4.5, opened by hand as the primary in one session:
   - the first prompt received the digest through `sessionStart` (11256 bytes); the model quoted `primary harness: copilot` and the lock line;
   - a status line was typed back as one doorbell, and the model drained and acknowledged the queue (`--ack-through`);
   - `/compact` completed; the next prompt carried one `userPromptSubmitted` output of 8681 bytes (the other three returned 4 bytes), and the model quoted the re-emit's first line;
   - `/exit` returned the pane to its shell with the `Resume copilot --resume=<id>` line, and the wake log recorded `stopped: the pane agent is gone`.
-- Not exercised in the combined run: Herdr (covered by the branches' own sections and by the Herdr wake suite, which ran against its lab session), an update restart, and a natural automatic compaction.
+- Not exercised in the combined run: Herdr, which the sections above and the Herdr wake suite cover.
 
 ## Interrupt transcript, launch prompt and update restart
 
@@ -398,7 +424,10 @@ Live checks, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone,
   Five cancels wrote five lines; none appeared for 12 finished turns, for a double Escape on an idle session, or for a Ctrl-C with nothing running.
   `bin/fm-copilot-wake.sh` rings on it (3.3 s after the cancel, against about 92 s at the 120 s grace), ignores an abort that a later `user.message` follows, and falls back to the grace when the file is unreadable.
   `bin/fm-control.sh` reads a new one in the task's own `COPILOT_HOME` as the cancel acknowledgement; the portable pins are `tests/fm-copilot-wake.test.sh` and `tests/fm-control.test.sh`.
-  Not run: the `fm-control` change on a live Copilot task, an interrupt during a subagent or a permission prompt, Herdr, and the default `~/.copilot` path (inferred from the `agentStop` `transcriptPath`).
+  Not run: the `fm-control` change on a live Copilot task, an interrupt during a subagent or a permission prompt, and Herdr.
+  On 2026-11-12 `FM_COPILOT_SIGNALS_LIVE=1 bash bin/fm-test-run.sh tests/fm-copilot-signals-live-e2e.test.sh` passed on copilot 1.0.109 (tmux 3.7c, Linux, WSL2) in the default `~/.copilot`.
+  It starts a long second turn, sends a double Escape through a private pty, and asserts the transcript gained a line starting with `{"type":"abort"`.
+  The matcher is `fm_copilot_abort_count` in `bin/fm-busy-lib.sh`, shared by the wake and `fm-control`, and the guard fails with `copilot <version>` in its message when a release stops writing that event.
 - **Launch prompt:** a plain launch fired no hook in 25 s; `-i '<prompt>'` fired `userPromptSubmitted` at +2.5 s and `sessionStart` (`source:new`) at +6.4 s with a 7902-character digest, and `--resume=<id> -i` fired `sessionStart` with `source:resume`.
   With an untrusted folder the `-i` prompt waited for the trust dialog and was submitted 0.29 s after `Yes`; `No` ended the session.
 - **Update restart:** `bin/fm-update.sh` then `bin/fm-secondmate-restart.sh` relaunched a live Copilot secondmate fresh (no `--resume`) with one new digest and a new lock.
@@ -411,7 +440,9 @@ Live checks, 2026-11-11, copilot 1.0.109 on tmux (private socket, scratch clone,
 - A live host that keeps the Copilot token in `config.json` rather than the OS keyring (the copy is only pinned with fake values).
 - A real attached client's typing, IME input, and a slash or `@` popup opening in the keystroke window; keys were injected through the multiplexer.
 - An in-process `/resume` to another session, whose `source` was not recorded.
-- Any Copilot version other than 1.0.105 and 1.0.109 (see "Copilot 1.0.109 output reads"), and a full worker or secondmate run on 1.0.109.
+- Any Copilot version other than 1.0.105 and 1.0.109 (see "Copilot 1.0.109 output reads"), and a ship worker or secondmate run on 1.0.109 (a Copilot scout ran on 1.0.109 in the [2026-11-16 soak](#soak-in-a-second-firstmate-home-in-the-default-herdr-session)).
+- macOS and native Windows, which no run has covered (the soak ran on Linux under WSL2).
+- Whether Copilot asked to sign in during the soak, and the optional second-model pass of the runbook, were not recorded or not run.
 
 ## Reusable guards
 
