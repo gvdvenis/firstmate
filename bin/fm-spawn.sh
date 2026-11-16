@@ -3368,7 +3368,7 @@ copilot)
   }
   copilot_version=$(fm_run_timed 5 "$COPILOT_BIN" --version 2>/dev/null </dev/null | head -n 1 || true)
   fm_copilot_version_verified "$copilot_version" \
-    || echo "$(fm_copilot_version_warning "$copilot_version")" >&2
+    || printf '%s\n' "$(fm_copilot_version_warning "$copilot_version")" >&2
   ;;
 pi | pi-signed)
   PI_BIN=$(resolve_pi_executable "$HARNESS") || {
