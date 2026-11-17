@@ -55,7 +55,7 @@ set -u
 # Lowercase substrings that mark a tool name as delegation-shaped: it creates
 # work, an agent, a schedule, or an isolated workspace that firstmate would not
 # know about. This list is the single owner of the shipped classification.
-DELEGATION_STEMS='agent subagent task workflow cron schedul worktree delegate spawn dispatch handoff remote sendmessage monitor'
+DELEGATION_STEMS='agent subagent task workflow cron schedul worktree delegate spawn dispatch handoff remote sendmessage monitor createsession sendsessionmessage'
 
 # Exact lowercase tool names that match a stem above but only OBSERVE or STOP
 # work that already exists. Reading or ending unaccounted work is not creating
@@ -63,7 +63,7 @@ DELEGATION_STEMS='agent subagent task workflow cron schedul worktree delegate sp
 # or end it. A local Claude deny list may still remove these from the
 # schema; this shipped guard deliberately stays narrower so it can never be the
 # reason a runaway task cannot be stopped.
-OBSERVE_ONLY_TOOLS='taskoutput taskstop taskget tasklist cronlist bashoutput killshell managesubagents managetask'
+OBSERVE_ONLY_TOOLS='taskoutput taskstop taskget tasklist cronlist bashoutput killshell managesubagents managetask readagent listagents'
 
 # Exact lowercase tool names that match a stem above but create no RUNNABLE
 # work. These write only the harness's session-local todo list, which has no
@@ -143,6 +143,11 @@ if [ "$TOOL_SET" -eq 0 ]; then
   PAYLOAD=$(cat 2>/dev/null || true)
   [ -n "$PAYLOAD" ] || exit 0
   command -v jq >/dev/null 2>&1 || exit 0
+  # Copilot loads the tracked Claude settings too and runs this entry on its own
+  # tools; it is not a Firstmate primary (docs/verification/copilot.md).
+  # shellcheck source=bin/fm-hook-host-lib.sh
+  . "$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/fm-hook-host-lib.sh"
+  fm_hook_payload_is_copilot "$PAYLOAD" && exit 0
   TOOL=$(printf '%s' "$PAYLOAD" | jq -r '(.toolCall.name // .tool_name // .toolName // empty)' 2>/dev/null) || exit 0
 fi
 
@@ -156,6 +161,9 @@ LC_ALL=C NORMALIZED=$(printf '%s' "$TOOL" | tr '[:upper:]' '[:lower:]' | tr -cd 
 # blocking it would be a false positive with no bearing on fleet dispatch.
 case "$TOOL" in
   mcp__*) exit 0 ;;
+  # Copilot names MCP tools `<server>-<tool>` instead (github-mcp-server-*).
+  # The prefix match is deliberate and its accepted gap is documented in docs/subagent-guard.md.
+  github-mcp-server-*) exit 0 ;;
 esac
 
 for allowed in $OBSERVE_ONLY_TOOLS $PLAN_ONLY_TOOLS; do
