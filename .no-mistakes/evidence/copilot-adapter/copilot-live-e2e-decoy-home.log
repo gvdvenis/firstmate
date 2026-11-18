@@ -1,0 +1,8 @@
+decoy shared COPILOT_HOME=/tmp/cpl-decoy.tPdXfF with a newer, abort-free events.jsonl:
+total 4
+-rw-rw-r-- 1 gvdvenis gvdvenis 25 2026-11-18 22:01:51.766420498 +0100 events.jsonl
+ok - copilot GitHub Copilot CLI 1.0.113.: live process comm=MainThread argv0=copilot classified as an agent
+ok - copilot GitHub Copilot CLI 1.0.113.: a real prompt produced busy copilot-hook, agentStop closed it and raised the turn-end notification, /exit ended cleanly
+ok - copilot GitHub Copilot CLI 1.0.113.: a double Escape cancelled the turn and the transcript recorded an abort event
+exit=0
+decoy home sessions after run: decoy-concurrent

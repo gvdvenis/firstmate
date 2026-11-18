@@ -1,0 +1,7 @@
+++ FM_COPILOT_SIGNALS_LIVE=1
+++ bash tests/fm-copilot-signals-live-e2e.test.sh
+ok - copilot GitHub Copilot CLI 1.0.113.: live process comm=MainThread argv0=copilot classified as an agent
+ok - copilot GitHub Copilot CLI 1.0.113.: a real prompt produced busy copilot-hook, agentStop closed it and raised the turn-end notification, /exit ended cleanly
+ok - copilot GitHub Copilot CLI 1.0.113.: a double Escape cancelled the turn and the transcript recorded an abort event
+exit=0
+new sessions in default ~/.copilot during run: 0
