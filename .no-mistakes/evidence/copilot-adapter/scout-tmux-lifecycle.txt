@@ -1,0 +1,28 @@
+## spawn
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.gKHXYM
+warning: copilot version GitHub Copilot CLI 1.0.113. is outside the verified range 1.0.105-1.0.109; the composer, busy and interrupt reads may not match
+spawned cpscout1 harness=copilot kind=scout window=primary:fm-cpscout1 worktree=~/.treehouse/demo-995de8/1/demo
+SPAWN_RC=0
+## status
+## report
+README.md contains exactly “hello”.
+## busy record at end: seq=3 state=idle source=copilot-hook event=agent-stop
+## fm-control cpscout1 exit
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.gKHXYM
+stopped cpscout1 harness=copilot backend=tmux endpoint=primary:fm-cpscout1 worktree=~/.treehouse/demo-995de8/1/demo
+EXIT_RC=0
+## fm-teardown
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /tmp/fm-lab.gKHXYM
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+teardown: reaping leaked worktree process(es) for cpscout1: 1124049
+teardown: force-killing leaked worktree process(es) for cpscout1: 1124049
+🌳 Worktree returned to pool.
+teardown cpscout1 complete (window primary:fm-cpscout1, worktree ~/.treehouse/demo-995de8/1/demo)
+Backlog: cpscout1 just finished (this home keeps no markdown backlog at /tmp/fm-lab.gKHXYM/data/backlog.md). Update /tmp/fm-lab.gKHXYM/data/backlog.md - move cpscout1 to Done, keep Done to the 10 most recent, then re-scan Queued and dispatch only work whose blockers are gone and date is due.
+TD_RC=0

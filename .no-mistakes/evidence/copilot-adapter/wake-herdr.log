@@ -1,0 +1,10 @@
+ok - fm-copilot-wake start: accepts a live Herdr pane
+ok - fm-copilot-wake: a running turn defers the wake and an idle Herdr pane gets the typed doorbell
+ok - fm-copilot-wake: an unacknowledged wake is re-rung until the queue row is gone
+ok - fm-copilot-wake: a half-written line is left intact and the wake lands after it clears
+ok - fm-copilot-wake: a key landing right after the composer read makes the ring refuse and stay out of the draft
+ok - fm-copilot-wake: an unrecognized screen defers the wake
+ok - fm-copilot-wake: it stands down when Copilot leaves the Herdr pane
+ok - fm-copilot-wake start: a missing Herdr pane is refused
+ok - fm_backend_herdr_foreground_argv0s: reads argv[0] from a captured live process-info body
+exit=0

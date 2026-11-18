@@ -1,0 +1,50 @@
+ [Current]  Sessions   Issues   Pull requests   Gists
+
+   -name '*.msg' 2>/dev/null | sort -V`, read the complete contents of each record (including its final line even when it is not newline-terminated) and act on each message in numeric order,         ┃
+   then acknowledge each handled message by moving it: `mv '/tmp/fm-lab.gKHXYM/state/cpscout1.inbox'/NNN.msg '/tmp/fm-lab.gKHXYM/state/cpscout1.inbox'/handled/`.                                      ┃
+   Prefer the format-aware `fm_task_inbox_body` reader from `bin/fm-task-inbox-lib.sh` when it is available. If you read manually, a header line `body-terminator=1` means the writer added            ┃
+   exactly one synthetic final newline to terminate the record file; that marked newline is not part of the logical message body, so remove only it and preserve any intentional trailing              ┃
+   newlines. Legacy records without that marker may end without a newline; read them through the file end.                                                                                             ┃
+   The move IS the acknowledgement: without it firstmate rings again and eventually treats you as stuck. An empty or absent inbox needs no action.                                                     ┃
+                                                                                                                                                                                                       ┃
+   # Definition of done                                                                                                                                                                                ┃
+   Write your findings to `/tmp/fm-lab.gKHXYM/data/cpscout1/report.md`.                                                                                                                                ┃
+   The report must stand alone: what you did, what you found, the evidence (commands run, output, file:line references), and what you recommend.                                                       ┃
+   If your deliverable is a visual artifact the captain will review and iterate on, use the lavish-axi rule: arm your board with bin/fm-procevent-lavish.sh arm <artifact.html> --for <task-id>;       ┃
+   never run lavish-axi poll yourself. Re-arm with the reply after each nonterminal round to acknowledge it, route the board feedback through your steering inbox, write needs-decision                ┃
+   [key=board-review] with the live board URL when the captain owes a decision, and stop at session_ended or an empty End without re-arming - acknowledge that final round with                        ┃
+   bin/fm-procevent.sh handled <source-id> <sequence> to conclude and retire your board.                                                                                                               ┃
+   Before reporting done, read and follow `{run-worktree}/.agents/skills/captain-hold-lifecycle/SKILL.md` and pass its shared           ┃
+   completion gate for the report and any visual review.                                                                                                                                               ┃
+   Only when the reviewed inventory is empty, run `FM_HOME='/tmp/fm-lab.gKHXYM' bash '{run-worktree}/bin/fm-captain-hold.sh'            ┃
+   complete 'cpscout1' --none`.                                                                                                                                                                        ┃
+   This exception permits only that command, not direct metadata edits, another task, or any backlog write.                                                                                            ┃
+   If any captain call remains, ask firstmate to register the inventory and attest completion before you report done.                                                                                  ┃
+   If the command refuses, report the refusal to firstmate and stop rather than bypassing the completion gate.                                                                                         ┃
+   When the report is complete, append `done [at=<epoch>]: {one-line conclusion}` to the status file and stop.                                                                                         ┃
+   If your findings reveal work that should ship (e.g. you reproduced a bug and the fix is clear), say so in the report; firstmate may promote this task in place, and you would then receive          ┃
+   mode-specific ship instructions as a follow-up message.                                                                                                                                             ┃
+                                                                                                                                                                                                       ┃
+ MD Read README.md 1 line read                                                                                                                                                                         ┃
+                                                                                                                                                                                                       ┃
+ ⌄ Thought for 2s                                                                                                                                                                                      ┃
+ │ I need to focus on what's being asked: it says to do nothing else except follow the operational report gate, which requires minimal reading first. I should write a report using just one sentence, ┃
+ │ like “README.md contains exactly `hello`.” The instructions are clear, standing alone, but one sentence is enough. I’ll include, “Read `README.md:1` using ...; its exact text is `hello`.” It’s    ┃
+ │ important to remember the report file gate even though my task seems minimal.                                                                                                                       ┃
+                                                                                                                                                                                                       ┃
+ MD Read SKILL.md 79 lines read                                                                                                                                                                        ┃
+                                                                                                                                                                                                       ┃
+ ● Edit  Create /tmp/fm-lab.gKHXYM/data/cpscout1/report.md (+1)                                                                                                                                        ┃
+                                                                                                                                                                                                       ┃
+ $ Shell Attest empty decision inventory and get completion timestamp 2 lines…                                                                                                                         ┃
+   FM_HOME='/tmp/fm-lab.gKHXYM' bash '{run-worktree}/bin/fm-captain-hold.sh' complete 'cpscout1' --none && date +%s                     ┃
+ $ Shell Record task completion No Content                                                                                                                                                             ┃
+   echo 'done [at=1795019840]: README.md contains exactly hello; report written.' >> '/tmp/fm-lab.gKHXYM/state/cpscout1.status' && { [ ! -e '/tmp/fm-lab.gKHXYM/config/fleet-ledger' ] || '~ ┃
+                                                                                                                                                                                                       ┃
+ ● README.md contains exactly “hello”.                                                                                                                                                                 ┃
+                                                                                                                                                                                                       ┃
+ ~/.treehouse/demo-995de8/1/demo [⎇ detached@bea525f]                                                                                                                            Session: 7.09 AIC used
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ← open sidebar · Interactive · Allow All · / commands · ? help · tab next tab                                                                                                              GPT-6.1 Sol

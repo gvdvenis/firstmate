@@ -1,0 +1,13 @@
+# bin/fm-pretool-copilot.sh in a scratch plain primary checkout (Copilot native preToolUse payloads)
+github-mcp-server-create_pull_request_with_copilot -> {"permissionDecision":"deny","permissionDecisionReason":"[subagent-dispatch] the firstmate primary dispatches through the fleet, not the harness's own delegation tools: work started that way has no durable fleet record, leaves every firstmate guard inert, and dies with this session. Instead, first classify the work under the AGENTS.md intake contract, then use bin/fm-brief.sh followed by bin/fm-spawn.sh for dispatched work (blocked tool: github-mcp-server-create_pull_request_with_copilot, delegation-shaped on \"withcopilot\"). Launch the session with FM_ALLOW_SUBAGENT=1 for a deliberate exception."}
+github-mcp-server-assign_copilot_to_issue -> {"permissionDecision":"deny","permissionDecisionReason":"[subagent-dispatch] the firstmate primary dispatches through the fleet, not the harness's own delegation tools: work started that way has no durable fleet record, leaves every firstmate guard inert, and dies with this session. Instead, first classify the work under the AGENTS.md intake contract, then use bin/fm-brief.sh followed by bin/fm-spawn.sh for dispatched work (blocked tool: github-mcp-server-assign_copilot_to_issue, delegation-shaped on \"assigncopilot\"). Launch the session with FM_ALLOW_SUBAGENT=1 for a deliberate exception."}
+github-mcp-server-get_copilot_task_status -> <allow: no output>
+task -> {"permissionDecision":"deny","permissionDecisionReason":"[subagent-dispatch] the firstmate primary dispatches through the fleet, not the harness's own delegation tools: work started that way has no durable fleet record, leaves every firstmate guard inert, and dies with this session. Instead, first classify the work under the AGENTS.md intake contract, then use bin/fm-brief.sh followed by bin/fm-spawn.sh for dispatched work (blocked tool: task, delegation-shaped on \"task\"). Launch the session with FM_ALLOW_SUBAGENT=1 for a deliberate exception."}
+view -> <allow: no output>
+task (from subagent) -> <allow: no output>
+bash 'cd projects/foo' -> {"permissionDecision":"deny","permissionDecisionReason":"[persistent-cd] a persistent top-level directory change in the primary firstmate checkout is blocked; it would move the shell out of the home so a later firstmate-owned command runs inside a project clone. Reach the target without moving the shell - use git -C <dir> or an absolute path on the command itself - or scope the cd to a subshell like (cd <dir> && ...)."}
+
+# fm_copilot_abort_count
+missing events file: count='0'
+integer compare ok
+file with 2 aborts: count='2'

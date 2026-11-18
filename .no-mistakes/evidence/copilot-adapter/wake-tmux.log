@@ -1,0 +1,13 @@
+ok - fm-copilot-wake start: confirms a live watcher and is idempotent
+ok - fm-copilot-wake: a wake waits while the busy record and footer both show a turn running
+ok - fm-copilot-wake: a real watcher event reaches an idle pane as a watcher doorbell
+ok - fm-copilot-wake: the watcher runs again after the wake's close
+ok - fm-copilot-wake: an unacknowledged wake is re-rung
+ok - fm-copilot-wake: an acknowledged queue stops the rings
+ok - fm-copilot-wake: a half-written line defers the wake, stays intact, and the wake lands after it clears
+ok - fm-copilot-wake: a key landing right after the composer read makes the ring refuse and stay out of the draft
+ok - fm-copilot-wake: an unrecognized screen defers the wake
+ok - fm-copilot-wake: a swallowed Enter resubmits the unsent doorbell without retyping it
+ok - fm-copilot-wake: a stale busy record with no busy footer is treated as an interrupted turn
+ok - fm-copilot-wake turn: subagent payloads and non-primary directories leave the record alone
+exit=0
